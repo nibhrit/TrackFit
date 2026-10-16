@@ -1,4 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { supabase } from './lib/supabase'
+import { useSession } from './lib/useSession'
+import SignIn from './screens/SignIn'
+import Settings from './screens/Settings'
 
 type Tab = 'today' | 'lift' | 'protein' | 'week'
 
@@ -12,23 +16,54 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 const today = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 export default function App() {
+  const session = useSession()
   const [tab, setTab] = useState<Tab>('today')
+  const [showSettings, setShowSettings] = useState(false)
+  const userId = session?.user.id
+
+  // First sign-in on any device: make sure the user's settings row exists (no-op afterwards).
+  useEffect(() => {
+    if (userId) supabase.from('user_settings').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true }).then()
+  }, [userId])
+
+  useEffect(() => { if (!session) setShowSettings(false) }, [session])
+
+  if (session === undefined) return <div className="app" aria-busy="true" />
+  if (session === null) return <div className="app"><main><SignIn /></main></div>
+
   const current = TABS.find((t) => t.id === tab)!
 
   return (
     <div className="app">
       <main>
-        <div className="hdr">
-          <h1>{current.label}</h1>
-          <span className="cap">{today}</span>
-        </div>
-        <div className="card cap">
-          TrackFit is being built. This screen will show your {current.label.toLowerCase()} data.
-        </div>
+        {showSettings ? (
+          <Settings session={session} onClose={() => setShowSettings(false)} />
+        ) : (
+          <>
+            <div className="hdr">
+              <h1>{current.label}</h1>
+              <span className="hdr-right">
+                <span className="cap">{today}</span>
+                <button className="icon-btn" aria-label="Settings" onClick={() => setShowSettings(true)}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+                    <circle cx="12" cy="8" r="3.5" /><path d="M5 20c1.2-3.6 3.8-5.5 7-5.5s5.8 1.9 7 5.5" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+            <div className="card cap">
+              TrackFit is being built. This screen will show your {current.label.toLowerCase()} data.
+            </div>
+          </>
+        )}
       </main>
       <nav className="tabs" aria-label="Main">
         {TABS.map((t) => (
-          <button key={t.id} aria-current={t.id === tab ? 'page' : undefined} onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            aria-current={!showSettings && t.id === tab ? 'page' : undefined}
+            onClick={() => { setTab(t.id); setShowSettings(false) }}
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {t.icon}
             </svg>

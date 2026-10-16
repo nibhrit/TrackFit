@@ -10,5 +10,15 @@ if (!url || !key) {
 }
 
 export const supabase = createClient(url, key, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    // Implicit flow: the sign-in link works even when the email app opens it
+    // in a different browser from the one that requested it.
+    flowType: 'implicit',
+  },
 })
+
+// Where the sign-in link returns to: this app's own address (local or GitHub Pages).
+export const appUrl = () => window.location.origin + import.meta.env.BASE_URL
