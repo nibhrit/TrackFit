@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { clearUser } from '../data/store'
 
 type Props = { session: Session; onClose: () => void }
 
@@ -24,7 +25,7 @@ export default function Settings({ session, onClose }: Props) {
           {synced === 'checking' ? 'Checking sync…' : synced === 'ok' ? 'Your data syncs across your devices.' : 'Couldn’t reach your data. Check your connection.'}
         </span>
       </div>
-      <button className="btn ghost" onClick={() => supabase.auth.signOut()}>Sign out</button>
+      <button className="btn ghost" onClick={() => { clearUser(); supabase.auth.signOut() }}>Sign out</button>
     </>
   )
 }

@@ -3,6 +3,9 @@ import { supabase } from './lib/supabase'
 import { useSession } from './lib/useSession'
 import SignIn from './screens/SignIn'
 import Settings from './screens/Settings'
+import Lift from './screens/Lift'
+import Toast from './components/Toast'
+import { clearUser, loadForUser } from './data/store'
 
 type Tab = 'today' | 'lift' | 'protein' | 'week'
 
@@ -23,7 +26,9 @@ export default function App() {
 
   // First sign-in on any device: make sure the user's settings row exists (no-op afterwards).
   useEffect(() => {
-    if (userId) supabase.from('user_settings').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true }).then()
+    if (!userId) { clearUser(); return }
+    supabase.from('user_settings').upsert({ user_id: userId }, { onConflict: 'user_id', ignoreDuplicates: true })
+      .then(() => loadForUser(userId))
   }, [userId])
 
   useEffect(() => { if (!session) setShowSettings(false) }, [session])
@@ -38,6 +43,8 @@ export default function App() {
       <main>
         {showSettings ? (
           <Settings session={session} onClose={() => setShowSettings(false)} />
+        ) : tab === 'lift' ? (
+          <Lift />
         ) : (
           <>
             <div className="hdr">
@@ -71,6 +78,7 @@ export default function App() {
           </button>
         ))}
       </nav>
+      <Toast />
     </div>
   )
 }

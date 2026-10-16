@@ -90,3 +90,35 @@ nav.tabs svg { width: 22px; height: 22px; }
 .signin-brand img { border-radius: 14px; }
 .signin-brand h1 { margin: 0; font-size: 34px; font-weight: 800; font-stretch: 125%; }
 .signin-brand p { margin: 0; font-size: 15px; max-width: 30ch; }
+
+/* Lists, chips, sections */
+.sec { margin: 6px 2px -4px; font-size: 13px; font-weight: 600; color: var(--steel); }
+.group { display: flex; flex-direction: column; gap: 10px; }
+.list { display: flex; flex-direction: column; gap: 8px; }
+.row {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%;
+  background: var(--card); border-radius: 14px; padding: 12px 14px; min-height: 56px; text-align: left;
+}
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chips.scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.chips.scroll::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto; background: var(--card); border-radius: 999px; padding: 10px 14px; min-height: 44px; font-size: 14px;
+}
+.chip[aria-pressed='true'] { background: var(--lift); color: var(--on-lift); font-weight: 600; }
+select, .field {
+  height: 50px; width: 100%; min-width: 0; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 12px;
+}
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.link.danger { color: var(--danger); align-self: flex-start; }
+.btn.danger { background: var(--danger); color: var(--card); }
+
+/* Toast */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 10;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px)); width: min(408px, calc(100% - 32px));
+  background: var(--ink); color: var(--card); border-radius: 14px; padding: 10px 10px 10px 16px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px;
+}
+.toast button { color: var(--card); font-weight: 700; text-decoration: underline; padding: 8px 10px; }
