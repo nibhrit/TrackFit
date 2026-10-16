@@ -75,5 +75,6 @@ export default function SignIn() {
 
 function friendly(msg: string) {
   if (/rate limit|too many|security purposes/i.test(msg)) return 'Too many emails sent. Wait a few minutes, then try again.'
-  return 'Couldn’t send the email. Check your connection and try again.'
+  if (/sending|smtp|email/i.test(msg)) return `The email service rejected the request (${msg}). Check the email settings in Supabase.`
+  return `Couldn’t send the email (${msg}). Check your connection and try again.`
 }
