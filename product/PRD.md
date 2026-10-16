@@ -103,6 +103,7 @@ Priorities: **P0** = must-have for launch · **P1** = should-have for launch · 
 | L3 | **On selecting an exercise, show the last session's date and per-set weights, in the unit they were logged in.** Offer "repeat last session" to pre-fill | P0 | TF-11 |
 | L4 | Exercise history: past sessions, heaviest weight (PR), simple trend of top-set weight | P1 | TF-12 |
 | L5 | Exercises belong to a muscle group (Chest, Back, Shoulders, Legs, Biceps, Triceps, Core). Lift page is grouped by muscle; user picks **today's split** (one or more groups) and both Lift and Today show only those groups | P0 | TF-24 |
+| L7 | **Plan week:** a button on Lift opens Mon–Sun; each day shows its muscle groups (past = trained, future = planned). Tap a day to set its groups; a planned day becomes that day's split. Previous / next week. Today's split starts empty each day unless planned | P0 | TF-30 |
 | L6 | "Choose exercise" dropdown, grouped by muscle, opens the exercise directly | P1 | TF-25 |
 
 ### 6.3 Protein Tracker — Epic `TF-3` (solves P2)
@@ -182,7 +183,8 @@ Every table carries `user_id`, and row-level security restricts each user to the
 | `quick_adds` | id, user_id, name, grams, sort_order | |
 | `protein_goals` | id, user_id, goal_g, effective_from | History of goals, so past days keep the goal they had |
 | `daily_habits` | user_id, date, sugar (`avoided`/`had`/null), junk_food (`avoided`/`had`/null) | One row per user per day |
-| `user_settings` | user_id, current_split (list of muscle groups), body_weight_unit | Today's split and preferences, synced across devices |
+| `user_settings` | user_id, body_weight_unit | Preferences, synced across devices |
+| `daily_splits` | user_id, date, groups (list of muscle groups) | One per day: past = trained, future = planned. A new day has no row, so the split resets on its own |
 | `body_weights` | user_id, date, weight, unit | One per user per day; a second entry that day replaces the first |
 
 "Today" is determined by the user's **local time zone** and resets at local midnight.
@@ -221,6 +223,9 @@ Every table carries `user_id`, and row-level security restricts each user to the
 | D5 | "Had it" colour | Graphite, not red | Red is kept for errors and deleting. A slip isn't an error, and the app shouldn't shame the user |
 | D6 | Mixed units in one session | Each weight shows its own unit | Matches the equipment |
 | D7 | Heaviest weight across units | Compared after converting to kg, shown in the unit logged | Fair comparison without changing what the user sees |
+| D9 | Today's split | Resets each day; stored per day | Splits change daily. Keeping each day also gives the week history for planning |
+| D10 | Plan week placement | Behind a "Plan week" button on Lift | Keeps the gym-time Lift page uncluttered |
+| D11 | Starter exercises | Offered with one tap on an empty list, not auto-added | Auto-adding would silently restore exercises a user had deleted |
 | D8 | Body weight chart colour | Neutral graphite line | Blue, yellow and green already mean lifting, protein and habits |
 | D4 | ± increments | **2.5 kg / 5 lb**, editable when typing | Matches the smallest common plate and dumbbell jumps |
 
@@ -231,7 +236,7 @@ Every table carries `user_id`, and row-level security restricts each user to the
 | Milestone | Contents | Exit criteria |
 |---|---|---|
 | M1 Foundation | TF-5 → TF-8 | Sign in on phone and laptop at the live URL |
-| M2 Lift Log | TF-9 → TF-12, TF-24, TF-25 | Used for 3 real gym sessions without falling back to memory |
+| M2 Lift Log | TF-9 → TF-12, TF-24, TF-25, TF-30 | Used for 3 real gym sessions without falling back to memory |
 | M3 Protein | TF-13 → TF-17, TF-26 | Used for 5 consecutive days |
 | M4 Habits and insights | TF-18, TF-19, TF-27, TF-28, TF-29 | Habits logged for 5 nights; Week view reflects real data |
 | **v1 launch** | M1–M4 | 4 weeks of personal use, then measured against §5 targets |

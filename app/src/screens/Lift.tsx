@@ -1,17 +1,22 @@
 import { useState } from 'react'
-import { addExercise, addStarters, toggleSplit, useStore } from '../data/store'
+import { addExercise, addStarters, splitFor, toggleSplit, useStore } from '../data/store'
+import { localDate } from '../lib/dates'
+import PlanWeek from './PlanWeek'
 import { GROUPS, STARTERS, type Exercise, type MuscleGroup, type Unit } from '../data/types'
 import ExerciseDetail from './ExerciseDetail'
 
 export default function Lift() {
-  const { loaded, exercises, settings } = useStore()
+  const store = useStore()
+  const { loaded, exercises } = store
   const [openId, setOpenId] = useState<string | null>(null)
+  const [planning, setPlanning] = useState(false)
   const [query, setQuery] = useState('')
 
   const open = exercises.find((e) => e.id === openId)
   if (open) return <ExerciseDetail exercise={open} onBack={() => setOpenId(null)} />
+  if (planning) return <PlanWeek onBack={() => setPlanning(false)} />
 
-  const split = settings.current_split
+  const split = splitFor(store, localDate())
   const q = query.trim().toLowerCase()
   const groups = GROUPS.filter((g) => exercises.some((e) => e.muscle_group === g))
   const shown = groups.filter((g) => !split.length || split.includes(g))
@@ -42,7 +47,10 @@ export default function Lift() {
             ))}
           </select>
 
-          <div className="sec">Today’s split</div>
+          <div className="hdr sec-row">
+            <span className="sec">Today’s split</span>
+            <button className="link" onClick={() => setPlanning(true)}>Plan week</button>
+          </div>
           <div className="chips scroll" role="group" aria-label="Today’s split">
             {groups.map((g) => (
               <button key={g} className="chip" aria-pressed={split.includes(g)} onClick={() => toggleSplit(g)}>{g}</button>

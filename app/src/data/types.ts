@@ -12,9 +12,11 @@ export type Exercise = {
 }
 
 export type Settings = {
-  current_split: MuscleGroup[]
   body_weight_unit: Unit
 }
+
+// Muscle groups per local date ('YYYY-MM-DD'): past = trained, future = planned
+export type Splits = Record<string, MuscleGroup[]>
 
 // Offered once on an empty list. Dumbbell work defaults to lb, machines and barbells to kg.
 export const STARTERS: Pick<Exercise, 'name' | 'muscle_group' | 'default_unit'>[] = [

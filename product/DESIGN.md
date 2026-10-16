@@ -64,6 +64,7 @@ One family: **Archivo** (Google Fonts, variable width + weight).
 | Screen | Purpose |
 |---|---|
 | **Today** (default) | Protein ring + quick-adds, last-time weights for today's split, End of day habits card |
-| **Lift** | Choose exercise dropdown, today's split chips, exercises grouped by muscle → exercise detail: last session, log today's sets |
+| **Lift** | Choose exercise dropdown, today's split chips with a *Plan week* link, exercises grouped by muscle → exercise detail: last session, log today's sets |
+| **Plan week** (from Lift) | Week arrows; Mon–Sun cards with each day's groups (today outlined in `lift` blue, past in ink, planned in blue); tap a day to edit its group chips |
 | **Protein** | Ring, quick-adds, type grams, today's entries (edit / delete) |
 | **Week** | Days logged this week, protein goal hit/miss per day, days without sugar, days without junk food, body weight log + line chart (graphite line) |

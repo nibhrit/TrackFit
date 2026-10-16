@@ -12,7 +12,9 @@ create function auth.uid() returns uuid language sql stable as $$ select nullif(
 grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;
 grant usage on schema public to authenticated, anon;
 `)
-await db.exec(fs.readFileSync(new URL("../migrations/20261016000000_init.sql", import.meta.url), 'utf8'))
+for (const f of fs.readdirSync(new URL('../migrations/', import.meta.url)).sort()) {
+  await db.exec(fs.readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8'))
+}
 await db.exec(`grant all on all tables in schema public to authenticated;`)
 const A='11111111-1111-1111-1111-111111111111', B='22222222-2222-2222-2222-222222222222'
 await db.exec(`insert into auth.users values ('${A}'),('${B}')`)
@@ -44,7 +46,12 @@ const h=(await as(A,`select sugar,junk_food from daily_habits`)).rows[0]; (h.sug
 await as(A, `insert into body_weights(date,weight,unit) values ('2026-10-16',78.4,'kg') on conflict (user_id,date) do update set weight=excluded.weight`)
 await as(A, `insert into body_weights(date,weight,unit) values ('2026-10-16',78.1,'kg') on conflict (user_id,date) do update set weight=excluded.weight`)
 const bw=(await as(A,`select weight::text from body_weights`)).rows; (bw.length===1&&bw[0].weight==='78.1')?ok('body weight: second log same day replaces'):bad(JSON.stringify(bw))
-await as(A, `insert into user_settings(current_split) values ('{Chest,Triceps}')`); ok('settings with split array')
+await as(A, `insert into user_settings(body_weight_unit) values ('kg')`); ok('settings row')
+await as(A, `insert into daily_splits(date,groups) values ('2026-10-13','{Chest,Triceps}'),('2026-10-17','{Back}')`)
+await as(A, `insert into daily_splits(date,groups) values ('2026-10-17','{Back,Biceps}') on conflict (user_id,date) do update set groups=excluded.groups`)
+const sp=(await as(A,`select date::text d, groups::text g from daily_splits order by date`)).rows
+JSON.stringify(sp)==='[{"d":"2026-10-13","g":"{Chest,Triceps}"},{"d":"2026-10-17","g":"{Back,Biceps}"}]'?ok('daily splits: one per day, upsert replaces'):bad(JSON.stringify(sp))
+const spB=(await as(B,`select count(*)::int c from daily_splits`)).rows[0].c; spB===0?ok('B sees 0 of A\'s splits'):bad('B sees A splits')
 try { await as(A, `insert into protein_goals(goal_g,effective_from) values (5,'2026-10-16')`); bad('goal 5 allowed') } catch { ok('goal bounds enforced') }
 // anon gets nothing
 await db.exec('set role anon'); try { await db.query('select * from exercises'); bad('anon read') } catch { ok('anon cannot read') } finally { await db.exec('reset role') }

@@ -122,3 +122,17 @@ select, .field {
   display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px;
 }
 .toast button { color: var(--card); font-weight: 700; text-decoration: underline; padding: 8px 10px; }
+
+/* Plan week */
+.sec-row { align-items: center; margin: 6px 2px -8px; }
+.sec-row .sec { margin: 0; }
+.week-nav { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.week-nav .btn { min-height: 44px; padding: 8px 14px; }
+.day-card { background: var(--card); border-radius: 14px; border: 2px solid transparent; }
+.day-card.today { border-color: var(--lift); }
+.day-head { width: 100%; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 14px; text-align: left; min-height: 56px; }
+.day-name { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.day-groups { font-weight: 600; color: var(--lift); }
+.day-card.past .day-groups { color: var(--ink); }
+.tag { font-size: 11px; font-weight: 600; color: var(--lift); background: var(--lift-soft); border-radius: 999px; padding: 2px 8px; }
+.day-edit { padding: 0 14px 14px; }

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
-import { STARTERS, type Exercise, type MuscleGroup, type Settings, type Unit } from './types'
+import { STARTERS, type Exercise, type MuscleGroup, type Settings, type Splits, type Unit } from './types'
+import { addDays, localDate } from '../lib/dates'
 
 // One shared store for the signed-in user's data.
 // Reads show the last known data instantly (cached on the device), then refresh from Supabase.
@@ -10,11 +11,12 @@ type State = {
   loaded: boolean
   exercises: Exercise[]
   settings: Settings
+  splits: Splits
 }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
-const EMPTY: State = { loaded: false, exercises: [], settings: { current_split: [], body_weight_unit: 'kg' } }
+const EMPTY: State = { loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {} }
 
 let state: State = EMPTY
 let toast: Toast | null = null
@@ -57,15 +59,17 @@ export async function loadForUser(id: string) {
     } catch { state = EMPTY }
     emit()
   }
-  const [ex, st] = await Promise.all([
+  const today = localDate()
+  const [ex, st, sp] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
-    supabase.from('user_settings').select('current_split,body_weight_unit').maybeSingle(),
+    supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
+    fetchSplits(addDays(today, -42), addDays(today, 42)),
   ])
-  if (ex.error || st.error) {
+  if (ex.error || st.error || !sp) {
     if (!state.loaded) showToast('Couldn’t load your data. Showing what’s saved on this device.')
     return
   }
-  set({ loaded: true, exercises: ex.data as Exercise[], settings: (st.data as Settings) ?? state.settings })
+  set({ loaded: true, exercises: ex.data as Exercise[], settings: (st.data as Settings) ?? state.settings, splits: sp })
 }
 
 export function clearUser() {
@@ -130,18 +134,32 @@ export async function addStarters(): Promise<string | null> {
   return null
 }
 
-// ---------- Today's split ----------
+// ---------- Splits (one per day) ----------
 
-export async function toggleSplit(group: MuscleGroup) {
-  const before = state.settings
-  const split = before.current_split.includes(group)
-    ? before.current_split.filter((g) => g !== group)
-    : [...before.current_split, group]
-  set({ settings: { ...before, current_split: split } })
-  const { error } = await supabase.from('user_settings').update({ current_split: split, updated_at: new Date().toISOString() }).eq('user_id', userId!)
+async function fetchSplits(from: string, to: string): Promise<Splits | null> {
+  const { data, error } = await supabase.from('daily_splits').select('date,groups').gte('date', from).lte('date', to)
+  if (error) return null
+  return Object.fromEntries((data as { date: string; groups: MuscleGroup[] }[]).map((r) => [r.date, r.groups]))
+}
+
+// Load another week's splits (week arrows on Plan week)
+export async function loadSplits(from: string, to: string) {
+  const sp = await fetchSplits(from, to)
+  if (sp) set({ splits: { ...state.splits, ...sp } })
+}
+
+export const splitFor = (s: State, date: string) => s.splits[date] ?? []
+
+export async function toggleSplit(group: MuscleGroup, date = localDate()) {
+  const current = splitFor(state, date)
+  const groups = current.includes(group) ? current.filter((g) => g !== group) : [...current, group]
+  const before = state.splits
+  set({ splits: { ...before, [date]: groups } })
+  const { error } = await supabase.from('daily_splits')
+    .upsert({ date, groups, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
   if (error) {
-    set({ settings: before })
-    showToast('Couldn’t save your split. Check your connection.')
+    set({ splits: before })
+    showToast('Couldn’t save the split. Check your connection.')
   }
 }
 
