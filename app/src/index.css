@@ -1,0 +1,61 @@
+/* Design tokens — see product/DESIGN.md ("Chalk and plate") */
+:root {
+  --chalk: #E8EBEA; --card: #FFFFFF; --ink: #1D2227; --steel: #5B636B; --line: #D3D9D7;
+  --slab: #1D2227; --slab-fg: #FFFFFF; --slab-dim: #AEB7C0;
+  --lift: #2F5BE0; --lift-soft: #E2E8FB; --on-lift: #FFFFFF;
+  --protein: #E8A900; --protein-track: #F2E7C2; --protein-text: #7A5800;
+  --habit: #23824A; --habit-soft: #DCEFE3; --on-habit: #FFFFFF;
+  --danger: #C73A3A;
+  --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --chalk: #121517; --card: #1C2023; --ink: #ECEFF0; --steel: #9AA3AB; --line: #2C3236;
+    --slab: #2A3036; --slab-fg: #F4F6F7; --slab-dim: #A7B0B8;
+    --lift: #6E8EFF; --lift-soft: #232B4D; --on-lift: #0B1230;
+    --protein: #FFC21A; --protein-track: #3A321A; --protein-text: #FFD24D;
+    --habit: #5CCB8A; --habit-soft: #1E3327; --on-habit: #0B1F14;
+    --danger: #FF7A7A;
+    color-scheme: dark;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background: var(--chalk);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--lift); outline-offset: 2px; }
+
+.num { font-stretch: 125%; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.cap { font-size: 13px; color: var(--steel); }
+.card { background: var(--card); border-radius: 18px; padding: 14px; }
+
+.app {
+  max-width: 440px; margin: 0 auto; min-height: 100%;
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+main { flex: 1; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.hdr { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.hdr h1 { margin: 0; font-size: 22px; font-weight: 700; font-stretch: 125%; }
+
+nav.tabs {
+  position: sticky; bottom: 0; background: var(--card); border-top: 1px solid var(--line);
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+nav.tabs button {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-height: 52px; border-radius: 12px; font-size: 12px; color: var(--steel);
+}
+nav.tabs button[aria-current='page'] { color: var(--lift); font-weight: 600; }
+nav.tabs svg { width: 22px; height: 22px; }

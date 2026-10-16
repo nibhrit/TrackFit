@@ -1,0 +1,16 @@
+# Secrets
+.env
+.env.*
+
+# Local-only: personal build notes, process notes, interview prep
+learnings/
+docs/
+.claude/
+
+# Build / deps
+node_modules/
+dist/
+.DS_Store
+
+# Local working instructions for Claude (personal process, not product content)
+CLAUDE.md
