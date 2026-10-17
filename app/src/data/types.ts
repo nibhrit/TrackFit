@@ -25,6 +25,31 @@ export type Session = {
   sets: LiftSet[]
 }
 
+export type ProteinEntry = {
+  id: string
+  grams: number
+  label: string | null
+  quick_add_id: string | null
+  logged_at: string
+  local_date: string
+}
+
+export type QuickAdd = { id: string; name: string; grams: number; sort_order: number }
+export type ProteinGoal = { goal_g: number; effective_from: string }
+
+export const DEFAULT_GOAL = 100
+
+// Offered once on an empty list; approximate values, editable
+export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams'>[] = [
+  { name: 'Whey scoop', grams: 24 },
+  { name: '3 eggs', grams: 18 },
+  { name: 'Chicken breast 100 g', grams: 31 },
+  { name: 'Paneer 100 g', grams: 18 },
+  { name: 'Soya chunks 50 g', grams: 26 },
+  { name: 'Greek yogurt cup', grams: 10 },
+  { name: 'Dal, 1 bowl', grams: 9 },
+]
+
 // Smallest common plate / dumbbell jump
 export const STEP: Record<Unit, number> = { kg: 2.5, lb: 5 }
 

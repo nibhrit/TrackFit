@@ -5,6 +5,7 @@ import SignIn from './screens/SignIn'
 import Settings from './screens/Settings'
 import Lift, { type LiftTarget } from './screens/Lift'
 import Today from './screens/Today'
+import Protein from './screens/Protein'
 import Toast from './components/Toast'
 import { clearUser, loadForUser, useStore } from './data/store'
 
@@ -53,6 +54,8 @@ export default function App() {
           <Settings session={session} onClose={() => setShowSettings(false)} />
         ) : tab === 'lift' ? (
           <Lift target={liftTarget} />
+        ) : tab === 'protein' ? (
+          <Protein />
         ) : (
           <>
             <div className="hdr">

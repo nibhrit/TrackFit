@@ -169,3 +169,20 @@ select, .field {
 .trend .axis { fill: var(--steel); font-size: 10px; font-family: var(--font); font-variant-numeric: tabular-nums; }
 .trend .line { fill: none; stroke: var(--lift); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .trend .dot { fill: var(--lift); stroke: var(--card); stroke-width: 2; }
+
+/* Protein */
+.ring-row { display: flex; gap: 16px; align-items: center; }
+.ring-track { fill: none; stroke: var(--protein-track); stroke-width: 12; }
+.ring-fill { fill: none; stroke: var(--protein); stroke-width: 12; stroke-linecap: round; transition: stroke-dasharray 0.5s ease; }
+.ring-check { fill: none; stroke: var(--protein-text); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.big { font-size: 34px; line-height: 1; }
+.goal-hit { color: var(--protein-text); font-weight: 600; font-size: 13px; }
+.chip.food b { font-weight: 600; }
+.log-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; gap: 8px; }
+.log-row input { height: 50px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 12px; min-width: 0; }
+.three { display: grid; grid-template-columns: auto 1fr 1fr; gap: 8px; align-items: center; }
+.confirm { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; }
+.food-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 4px; border-top: 1px solid var(--line); padding-top: 6px; }
+.food-name { text-align: left; min-height: 44px; display: flex; gap: 8px; align-items: baseline; }
+.icon-btn:disabled { opacity: 0.3; }
+@media (prefers-reduced-motion: reduce) { .ring-fill { transition: none; } }

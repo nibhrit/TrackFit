@@ -2,6 +2,8 @@ import { groupsOn, lastSession, todaySession, useStore } from '../data/store'
 import { GROUPS, type Exercise } from '../data/types'
 import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets } from '../lib/format'
+import ProteinSummary from '../components/ProteinRing'
+import QuickAdds from '../components/QuickAdds'
 
 type Props = {
   onOpenExercise: (id: string, repeat: boolean) => void
@@ -24,6 +26,9 @@ export default function Today({ onOpenExercise, onGoToLift }: Props) {
 
   return (
     <>
+      <div className="card"><ProteinSummary /></div>
+      <QuickAdds />
+
       <div className="hdr sec-row">
         <span className="sec">
           {groups.length ? `Last time: ${GROUPS.filter((g) => groups.includes(g)).join(', ')}` : 'Last time'}
@@ -64,7 +69,7 @@ export default function Today({ onOpenExercise, onGoToLift }: Props) {
         </>
       )}
 
-      <div className="card cap">Protein and end-of-day habits arrive in the next milestone.</div>
+      <div className="card cap">End-of-day habits arrive in the next milestone.</div>
     </>
   )
 }
