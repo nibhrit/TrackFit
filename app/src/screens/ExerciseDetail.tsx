@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { archiveExercise, deleteSession, lastSession, saveSession, showToast, todaySession, updateExercise, useStore } from '../data/store'
-import { GROUPS, STEP, type Exercise, type LiftSet, type MuscleGroup, type Unit } from '../data/types'
-import { fmtDate } from '../lib/dates'
+import { archiveExercise, deleteSession, lastSession, saveSession, sessionsFor, showToast, todaySession, updateExercise, useStore } from '../data/store'
+import TrendChart from '../components/TrendChart'
+import { GROUPS, STEP, type Exercise, type LiftSet, type MuscleGroup, type Session, type Unit } from '../data/types'
+import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets, fmtWeight } from '../lib/format'
 
 type Props = { exercise: Exercise; repeat?: boolean; onBack: () => void }
@@ -119,8 +120,51 @@ export default function ExerciseDetail({ exercise, repeat = false, onBack }: Pro
         ) : <span />}
       </div>
 
+      <History exercise={exercise} sessions={sessionsFor(store, exercise.id)} />
+
       <EditExercise exercise={exercise} onRemoved={onBack} />
     </>
+  )
+}
+
+// Weights are stored as entered; convert only to compare across units
+const LB = 0.45359237
+const toKg = (s: LiftSet) => (s.unit === 'lb' ? s.weight * LB : s.weight)
+const inUnit = (kg: number, unit: Unit) => (unit === 'lb' ? kg / LB : kg)
+
+function History({ exercise, sessions }: { exercise: Exercise; sessions: Session[] }) {
+  if (!sessions.length) return null
+  const all = sessions.flatMap((s) => s.sets.map((set) => ({ set, date: s.local_date })))
+  const best = all.reduce((a, b) => (toKg(b.set) > toKg(a.set) ? b : a))
+  const unit = exercise.default_unit
+  const points = [...sessions].reverse().map((s) => ({
+    date: s.local_date,
+    label: fmtDate(s.local_date),
+    value: inUnit(Math.max(...s.sets.map(toKg)), unit),
+  }))
+  const past = sessions.filter((s) => s.local_date !== localDate()) // today's sets are in the editor above
+
+  return (
+    <section className="group">
+      <h2 className="sec">History</h2>
+      <div className="card history-best">
+        <span className="cap">Heaviest set</span>
+        <span><b className="num">{fmtWeight(best.set.weight)} {best.set.unit}</b> <span className="cap">on {fmtDate(best.date)}</span></span>
+      </div>
+      {points.length >= 2 ? (
+        <div className="card"><TrendChart points={points} unit={unit} /></div>
+      ) : (
+        <div className="card cap">The trend line appears after your second session.</div>
+      )}
+      <div className="list">
+        {past.map((s) => (
+          <div key={s.id} className="row static">
+            <span className="cap">{fmtDate(s.local_date)}</span>
+            <span className="num row-weights">{fmtSets(s.sets)}</span>
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }
 
