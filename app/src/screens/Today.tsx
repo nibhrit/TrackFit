@@ -4,6 +4,7 @@ import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets } from '../lib/format'
 import ProteinSummary from '../components/ProteinRing'
 import QuickAdds from '../components/QuickAdds'
+import HabitsCard from '../components/HabitsCard'
 
 type Props = {
   onOpenExercise: (id: string, repeat: boolean) => void
@@ -69,7 +70,7 @@ export default function Today({ onOpenExercise, onGoToLift }: Props) {
         </>
       )}
 
-      <div className="card cap">End-of-day habits arrive in the next milestone.</div>
+      <HabitsCard />
     </>
   )
 }

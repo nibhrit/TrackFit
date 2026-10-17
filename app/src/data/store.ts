@@ -2,7 +2,8 @@ import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   DEFAULT_GOAL, STARTERS, STARTER_FOODS,
-  type Exercise, type LiftSet, type MuscleGroup, type ProteinEntry, type ProteinGoal, type QuickAdd,
+  type BodyWeight, type DayHabits, type Exercise, type HabitKey, type HabitResult, type LiftSet,
+  type MuscleGroup, type ProteinEntry, type ProteinGoal, type QuickAdd,
   type Session, type Settings, type Splits, type Unit,
 } from './types'
 import { addDays, localDate } from '../lib/dates'
@@ -22,6 +23,8 @@ type State = {
   protein: ProteinEntry[]
   quickAdds: QuickAdd[]
   goals: ProteinGoal[]
+  habits: Record<string, DayHabits>   // by date
+  weights: BodyWeight[]               // oldest first
   pending: number       // changes saved on the device, not yet synced
 }
 
@@ -30,12 +33,15 @@ type Op =
   | { kind: 'delete'; id: string }
   | { kind: 'protein_save'; entry: ProteinEntry }
   | { kind: 'protein_delete'; id: string }
+  | { kind: 'habit_save'; day: DayHabits }
+  | { kind: 'weight_save'; entry: BodyWeight }
+  | { kind: 'weight_delete'; date: string }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
 const EMPTY: State = {
   loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {}, sessions: [],
-  protein: [], quickAdds: [], goals: [], pending: 0,
+  protein: [], quickAdds: [], goals: [], habits: {}, weights: [], pending: 0,
 }
 
 let state: State = EMPTY
@@ -85,7 +91,7 @@ export async function loadForUser(id: string) {
   }
   await flushOutbox()
   const today = localDate()
-  const [ex, st, sp, ss, pe, qa, pg] = await Promise.all([
+  const [ex, st, sp, ss, pe, qa, pg, hb, bw] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
     supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
     fetchSplits(addDays(today, -42), addDays(today, 42)),
@@ -97,8 +103,10 @@ export async function loadForUser(id: string) {
       .gte('local_date', addDays(today, -40)).order('logged_at'),
     supabase.from('quick_adds').select('id,name,grams,sort_order').order('sort_order').order('name'),
     supabase.from('protein_goals').select('goal_g,effective_from').order('effective_from'),
+    supabase.from('daily_habits').select('date,sugar,junk_food').gte('date', addDays(today, -100)),
+    supabase.from('body_weights').select('date,weight,unit').gte('date', addDays(today, -400)).order('date'),
   ])
-  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error) {
+  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error || hb.error || bw.error) {
     if (!state.loaded) showToast('Couldn’t load your data. Showing what’s saved on this device.')
     return
   }
@@ -116,6 +124,8 @@ export async function loadForUser(id: string) {
     protein: applyProteinOutbox(pe.data as ProteinEntry[]),
     quickAdds: qa.data as QuickAdd[],
     goals: pg.data as ProteinGoal[],
+    habits: applyHabitOutbox(Object.fromEntries((hb.data as DayHabits[]).map((d) => [d.date, d]))),
+    weights: applyWeightOutbox((bw.data as BodyWeight[]).map((w) => ({ ...w, weight: Number(w.weight) }))),
   })
 }
 
@@ -284,7 +294,20 @@ function opKey(op: Op) {
     case 'delete': return `lift:${op.id}`
     case 'protein_save': return `protein:${op.entry.id}`
     case 'protein_delete': return `protein:${op.id}`
+    case 'habit_save': return `habit:${op.day.date}`
+    case 'weight_save': return `weight:${op.entry.date}`
+    case 'weight_delete': return `weight:${op.date}`
   }
+}
+
+function applyHabitOutbox(habits: Record<string, DayHabits>) {
+  return outbox.reduce((h, op) => (op.kind === 'habit_save' ? { ...h, [op.day.date]: op.day } : h), habits)
+}
+
+function applyWeightOutbox(weights: BodyWeight[]) {
+  return outbox.reduce((list, op) =>
+    op.kind === 'weight_save' ? upsertWeight(list, op.entry) : op.kind === 'weight_delete' ? list.filter((w) => w.date !== op.date) : list,
+  weights)
 }
 
 function applyLiftOutbox(sessions: Session[]) {
@@ -315,6 +338,12 @@ function send(op: Op) {
       return supabase.from('protein_entries').upsert(op.entry)
     case 'protein_delete':
       return supabase.from('protein_entries').delete().eq('id', op.id)
+    case 'habit_save':
+      return supabase.from('daily_habits').upsert({ ...op.day, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
+    case 'weight_save':
+      return supabase.from('body_weights').upsert({ ...op.entry, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
+    case 'weight_delete':
+      return supabase.from('body_weights').delete().eq('date', op.date)
   }
 }
 
@@ -329,7 +358,7 @@ export async function flushOutbox() {
       const op = outbox[0]
       const { error } = await send(op)
       if (error && isNetworkError(error)) break
-      if (error) showToast('One change couldn’t be saved and was discarded. Check the session and log it again.')
+      if (error) showToast('One change couldn’t be saved and was discarded. Please enter it again.')
       outbox = outbox.slice(1)
       persistOutbox()
     }
@@ -455,6 +484,65 @@ export async function addStarterFoods(): Promise<string | null> {
   if (error) return 'Couldn’t add them. Check your connection.'
   set({ quickAdds: [...state.quickAdds, ...(data as QuickAdd[])] })
   return null
+}
+
+// ---------- Habits ----------
+
+export const habitsOn = (s: State, date: string): DayHabits => s.habits[date] ?? { date, sugar: null, junk_food: null }
+
+// Tap the selected answer again to clear it
+export function setHabit(key: HabitKey, value: HabitResult, date = localDate()) {
+  const current = habitsOn(state, date)
+  const day: DayHabits = { ...current, [key]: current[key] === value ? null : value }
+  set({ habits: { ...state.habits, [date]: day } })
+  enqueue({ kind: 'habit_save', day })
+}
+
+// ---------- Body weight ----------
+
+const upsertWeight = (list: BodyWeight[], w: BodyWeight) =>
+  [...list.filter((x) => x.date !== w.date), w].sort((a, b) => a.date.localeCompare(b.date))
+
+// One per day: logging again the same day replaces it
+export function logWeight(weight: number, unit: Unit, date = localDate()) {
+  const entry = { date, weight, unit }
+  set({ weights: upsertWeight(state.weights, entry) })
+  enqueue({ kind: 'weight_save', entry })
+}
+
+export function deleteWeight(date: string) {
+  const w = state.weights.find((x) => x.date === date)
+  if (!w) return
+  set({ weights: state.weights.filter((x) => x.date !== date) })
+  enqueue({ kind: 'weight_delete', date })
+  showToast('Weight deleted', () => logWeight(w.weight, w.unit, w.date))
+}
+
+export async function setWeightUnit(unit: Unit) {
+  const before = state.settings
+  set({ settings: { ...before, body_weight_unit: unit } })
+  const { error } = await supabase.from('user_settings').update({ body_weight_unit: unit, updated_at: new Date().toISOString() }).eq('user_id', userId!)
+  if (error) { set({ settings: before }); showToast('Couldn’t save the unit. Check your connection.') }
+}
+
+// ---------- Insights ----------
+
+// A day counts as logged if anything was recorded: a lift, protein, a habit answer or body weight
+export function loggedOn(s: State, date: string) {
+  const h = s.habits[date]
+  return s.sessions.some((x) => x.local_date === date)
+    || s.protein.some((x) => x.local_date === date)
+    || !!(h && (h.sugar || h.junk_food))
+    || s.weights.some((w) => w.date === date)
+}
+
+// Consecutive logged days ending today (or yesterday, if today isn't logged yet)
+export function streak(s: State) {
+  let d = localDate()
+  if (!loggedOn(s, d)) d = addDays(d, -1)
+  let n = 0
+  while (loggedOn(s, d) && n < 400) { n++; d = addDays(d, -1) }
+  return n
 }
 
 const sortByName = (list: Exercise[]) => [...list].sort((a, b) => a.name.localeCompare(b.name))

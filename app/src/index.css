@@ -186,3 +186,42 @@ select, .field {
 .food-name { text-align: left; min-height: 44px; display: flex; gap: 8px; align-items: baseline; }
 .icon-btn:disabled { opacity: 0.3; }
 @media (prefers-reduced-motion: reduce) { .ring-fill { transition: none; } }
+
+/* Habits */
+.habit-row { display: grid; grid-template-columns: 92px 1fr; align-items: center; gap: 10px; }
+.seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.seg button { min-height: 44px; border-radius: 12px; background: var(--chalk); font-weight: 600; font-size: 14px; color: var(--steel); }
+.seg button.ok[aria-pressed='true'] { background: var(--habit); color: var(--on-habit); }
+.seg button.no[aria-pressed='true'] { background: var(--ink); color: var(--card); }
+.seg.small button { min-height: 36px; font-size: 13px; }
+.seg button.pick[aria-pressed='true'] { background: var(--lift-soft); color: var(--ink); }
+.trend.neutral .line { stroke: var(--ink); }
+.trend.neutral .dot { fill: var(--ink); }
+
+/* Week */
+.strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; }
+.day { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 12px; color: var(--steel); }
+.dot { width: 36px; height: 36px; border-radius: 50%; border: 1.5px solid var(--line); display: grid; place-items: center; font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.dot.on { background: var(--lift); border-color: var(--lift); color: var(--on-lift); }
+.dot.ok { background: var(--habit); border-color: var(--habit); color: var(--on-habit); }
+.dot.had { border: 2px solid var(--ink); }
+.dot.none { border-style: dashed; border-color: var(--steel); }
+.dot.future { color: var(--steel); opacity: 0.6; }
+.dot.today { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--lift); }
+.habit-num { color: var(--habit); }
+.protein-num { color: var(--protein-text); }
+.bars { position: relative; height: 130px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; align-items: end; }
+.bar-hit { height: 100%; display: flex; align-items: flex-end; padding: 0 2px; }
+.bars.dense .bar-hit { padding: 0; }
+.bar { display: block; width: 100%; border-radius: 4px 4px 0 0; background: var(--protein-track); }
+.bar-hit.hit .bar { background: var(--protein); }
+
+.goal-line { position: absolute; left: 0; right: 0; border-top: 1.5px dashed var(--steel); pointer-events: none; }
+.goal-line span { position: absolute; right: 0; top: -16px; font-size: 10px; color: var(--steel); background: var(--card); padding: 0 2px; }
+.bar-lbl { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; color: var(--steel); }
+.card-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; }
+.seg.small button { white-space: nowrap; padding: 0 12px; }
+.bar-hit.active .bar { outline: 1.5px solid var(--steel); outline-offset: 1px; }
+.weight-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
+.weight-row input { height: 50px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 12px; min-width: 0; }
+.weight-row .seg button { min-height: 50px; min-width: 44px; }

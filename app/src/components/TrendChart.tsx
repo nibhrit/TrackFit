@@ -4,7 +4,9 @@ export type Point = { date: string; value: number; label: string } // label = da
 
 // One-series line chart: 2px line in the lift colour, 8px markers with a surface ring,
 // recessive grid, last point labelled, tap/hover for any point's value.
-export default function TrendChart({ points, unit }: { points: Point[]; unit: string }) {
+type Props = { points: Point[]; unit: string; caption?: string; tone?: 'lift' | 'neutral' }
+
+export default function TrendChart({ points, unit, caption = 'Top set per session', tone = 'lift' }: Props) {
   const [active, setActive] = useState<number | null>(null)
   const W = 320, H = 150, L = 34, R = 12, T = 18, B = 22
 
@@ -27,12 +29,12 @@ export default function TrendChart({ points, unit }: { points: Point[]; unit: st
   }
 
   return (
-    <figure className="trend">
+    <figure className={`trend ${tone}`}>
       <figcaption className="cap">
-        Top set per session, {unit}. <span className="trend-read">{points[shown].label}: <b>{fmt(points[shown].value)} {unit}</b></span>
+        {caption}, {unit}. <span className="trend-read">{points[shown].label}: <b>{fmt(points[shown].value)} {unit}</b></span>
       </figcaption>
       <svg
-        viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Top set trend, ${points.length} sessions, latest ${fmt(points[last].value)} ${unit}`}
+        viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`${caption}, ${points.length} points, latest ${fmt(points[last].value)} ${unit}`}
         onPointerMove={nearest} onPointerDown={nearest} onPointerLeave={() => setActive(null)}
       >
         {ticks.map((t) => (

@@ -39,6 +39,11 @@ export type ProteinGoal = { goal_g: number; effective_from: string }
 
 export const DEFAULT_GOAL = 100
 
+export type HabitResult = 'avoided' | 'had'
+export type HabitKey = 'sugar' | 'junk_food'
+export type DayHabits = { date: string; sugar: HabitResult | null; junk_food: HabitResult | null }
+export type BodyWeight = { date: string; weight: number; unit: Unit }
+
 // Offered once on an empty list; approximate values, editable
 export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams'>[] = [
   { name: 'Whey scoop', grams: 24 },

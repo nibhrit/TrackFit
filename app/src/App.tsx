@@ -6,6 +6,7 @@ import Settings from './screens/Settings'
 import Lift, { type LiftTarget } from './screens/Lift'
 import Today from './screens/Today'
 import Protein from './screens/Protein'
+import Week from './screens/Week'
 import Toast from './components/Toast'
 import { clearUser, loadForUser, useStore } from './data/store'
 
@@ -56,6 +57,8 @@ export default function App() {
           <Lift target={liftTarget} />
         ) : tab === 'protein' ? (
           <Protein />
+        ) : tab === 'week' ? (
+          <Week />
         ) : (
           <>
             <div className="hdr">
