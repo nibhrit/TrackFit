@@ -6,15 +6,27 @@ import PlanWeek from './PlanWeek'
 import { GROUPS, STARTERS, type Exercise, type MuscleGroup, type Unit } from '../data/types'
 import ExerciseDetail from './ExerciseDetail'
 
-export default function Lift() {
+// Set when another screen (Today) opens an exercise; `key` changes on every request
+export type LiftTarget = { id: string; repeat: boolean; key: number }
+
+export default function Lift({ target }: { target?: LiftTarget | null }) {
   const store = useStore()
   const { loaded, exercises } = store
-  const [openId, setOpenId] = useState<string | null>(null)
+  const [openId, setOpenId] = useState<string | null>(target?.id ?? null)
+  const [repeat, setRepeat] = useState(target?.repeat ?? false)
+  const [targetKey, setTargetKey] = useState(target?.key)
   const [planning, setPlanning] = useState(false)
   const [query, setQuery] = useState('')
 
+  if (target && target.key !== targetKey) {
+    setTargetKey(target.key)
+    setOpenId(target.id)
+    setRepeat(target.repeat)
+    setPlanning(false)
+  }
+
   const open = exercises.find((e) => e.id === openId)
-  if (open) return <ExerciseDetail exercise={open} onBack={() => setOpenId(null)} />
+  if (open) return <ExerciseDetail key={open.id} exercise={open} repeat={repeat} onBack={() => { setOpenId(null); setRepeat(false) }} />
   if (planning) return <PlanWeek onBack={() => setPlanning(false)} />
 
   const split = splitFor(store, localDate())
@@ -42,7 +54,7 @@ export default function Lift() {
         <>
           <select
             id="pick-exercise" aria-label="Choose exercise" value=""
-            onChange={(e) => e.target.value && setOpenId(e.target.value)}
+            onChange={(e) => { if (e.target.value) { setOpenId(e.target.value); setRepeat(false) } }}
           >
             <option value="">Choose exercise</option>
             {groups.map((g) => (
@@ -74,7 +86,7 @@ export default function Lift() {
               <section key={g} className="group">
                 <h2 className="sec">{g}</h2>
                 <div className="list">
-                  {list.map((e) => <ExerciseRow key={e.id} exercise={e} onOpen={() => setOpenId(e.id)} />)}
+                  {list.map((e) => <ExerciseRow key={e.id} exercise={e} onOpen={() => { setOpenId(e.id); setRepeat(false) }} />)}
                 </div>
               </section>
             )

@@ -4,7 +4,7 @@ import { GROUPS, STEP, type Exercise, type LiftSet, type MuscleGroup, type Unit 
 import { fmtDate } from '../lib/dates'
 import { fmtSets, fmtWeight } from '../lib/format'
 
-type Props = { exercise: Exercise; onBack: () => void }
+type Props = { exercise: Exercise; repeat?: boolean; onBack: () => void }
 
 // Weights are edited as text so "62." can be typed on the way to "62.5"
 type Draft = { weight: string; unit: Unit }
@@ -13,7 +13,7 @@ const toDraft = (sets: LiftSet[]): Draft[] => sets.map((s) => ({ weight: fmtWeig
 const parse = (w: string) => (w.trim() === '' ? NaN : Number(w.replace(',', '.')))
 const valid = (w: string) => { const n = parse(w); return Number.isFinite(n) && n >= 0 && n <= 1000 }
 
-export default function ExerciseDetail({ exercise, onBack }: Props) {
+export default function ExerciseDetail({ exercise, repeat = false, onBack }: Props) {
   const store = useStore()
   const last = lastSession(store, exercise.id)
   const today = todaySession(store, exercise.id)
@@ -21,8 +21,10 @@ export default function ExerciseDetail({ exercise, onBack }: Props) {
   const savedDraft = toDraft(today?.sets ?? [])
   const savedKey = JSON.stringify(savedDraft)
 
-  const [draft, setDraftState] = useState<Draft[]>(savedDraft)
-  const [touched, setTouched] = useState(false)
+  // "Repeat" from Today: start from last session's sets when nothing is logged today yet
+  const repeating = repeat && !today && !!last
+  const [draft, setDraftState] = useState<Draft[]>(repeating ? toDraft(last!.sets) : savedDraft)
+  const [touched, setTouched] = useState(repeating)
   const [base, setBase] = useState(savedKey)
   const [error, setError] = useState<string | null>(null)
 

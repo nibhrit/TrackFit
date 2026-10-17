@@ -3,7 +3,8 @@ import { supabase } from './lib/supabase'
 import { useSession } from './lib/useSession'
 import SignIn from './screens/SignIn'
 import Settings from './screens/Settings'
-import Lift from './screens/Lift'
+import Lift, { type LiftTarget } from './screens/Lift'
+import Today from './screens/Today'
 import Toast from './components/Toast'
 import { clearUser, loadForUser, useStore } from './data/store'
 
@@ -22,6 +23,7 @@ export default function App() {
   const session = useSession()
   const [tab, setTab] = useState<Tab>('today')
   const [showSettings, setShowSettings] = useState(false)
+  const [liftTarget, setLiftTarget] = useState<LiftTarget | null>(null)
   const userId = session?.user.id
   const { pending } = useStore()
 
@@ -50,7 +52,7 @@ export default function App() {
         {showSettings ? (
           <Settings session={session} onClose={() => setShowSettings(false)} />
         ) : tab === 'lift' ? (
-          <Lift />
+          <Lift target={liftTarget} />
         ) : (
           <>
             <div className="hdr">
@@ -64,9 +66,16 @@ export default function App() {
                 </button>
               </span>
             </div>
-            <div className="card cap">
-              TrackFit is being built. This screen will show your {current.label.toLowerCase()} data.
-            </div>
+            {tab === 'today' ? (
+              <Today
+                onOpenExercise={(id, repeat) => { setLiftTarget({ id, repeat, key: Date.now() }); setTab('lift') }}
+                onGoToLift={() => { setLiftTarget(null); setTab('lift') }}
+              />
+            ) : (
+              <div className="card cap">
+                {current.label} arrives in a later milestone.
+              </div>
+            )}
           </>
         )}
       </main>
@@ -75,7 +84,7 @@ export default function App() {
           <button
             key={t.id}
             aria-current={!showSettings && t.id === tab ? 'page' : undefined}
-            onClick={() => { setTab(t.id); setShowSettings(false) }}
+            onClick={() => { setTab(t.id); setShowSettings(false); setLiftTarget(null) }}
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               {t.icon}

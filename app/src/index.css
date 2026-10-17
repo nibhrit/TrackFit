@@ -154,3 +154,5 @@ select, .field {
 .edit-ex summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
 .edit-ex[open] { display: flex; flex-direction: column; gap: 12px; }
 .sync { font-size: 13px; background: var(--protein-track); color: var(--protein-text); border-radius: 12px; padding: 8px 12px; }
+.slab-open { display: flex; flex-direction: column; gap: 6px; text-align: left; color: inherit; }
+.slab-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
