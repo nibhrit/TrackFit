@@ -5,7 +5,7 @@ import SignIn from './screens/SignIn'
 import Settings from './screens/Settings'
 import Lift from './screens/Lift'
 import Toast from './components/Toast'
-import { clearUser, loadForUser } from './data/store'
+import { clearUser, loadForUser, useStore } from './data/store'
 
 type Tab = 'today' | 'lift' | 'protein' | 'week'
 
@@ -23,6 +23,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('today')
   const [showSettings, setShowSettings] = useState(false)
   const userId = session?.user.id
+  const { pending } = useStore()
 
   // First sign-in on any device: make sure the user's settings row exists (no-op afterwards).
   useEffect(() => {
@@ -41,6 +42,11 @@ export default function App() {
   return (
     <div className="app">
       <main>
+        {pending > 0 && (
+          <div className="sync" role="status">
+            {pending === 1 ? '1 change' : `${pending} changes`} saved on this phone, waiting for signal
+          </div>
+        )}
         {showSettings ? (
           <Settings session={session} onClose={() => setShowSettings(false)} />
         ) : tab === 'lift' ? (

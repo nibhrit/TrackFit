@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { addExercise, addStarters, splitFor, toggleSplit, useStore } from '../data/store'
-import { localDate } from '../lib/dates'
+import { addExercise, addStarters, lastSession, splitFor, toggleSplit, todaySession, useStore } from '../data/store'
+import { fmtSets } from '../lib/format'
+import { fmtDate, localDate } from '../lib/dates'
 import PlanWeek from './PlanWeek'
 import { GROUPS, STARTERS, type Exercise, type MuscleGroup, type Unit } from '../data/types'
 import ExerciseDetail from './ExerciseDetail'
@@ -20,7 +21,11 @@ export default function Lift() {
   const q = query.trim().toLowerCase()
   const groups = GROUPS.filter((g) => exercises.some((e) => e.muscle_group === g))
   const shown = groups.filter((g) => !split.length || split.includes(g))
-  const inGroup = (g: MuscleGroup) => exercises.filter((e) => e.muscle_group === g && (!q || e.name.toLowerCase().includes(q)))
+  // Most recently trained first, then alphabetical
+  const lastDate = (e: Exercise) => (todaySession(store, e.id) ?? lastSession(store, e.id))?.local_date ?? ''
+  const inGroup = (g: MuscleGroup) => exercises
+    .filter((e) => e.muscle_group === g && (!q || e.name.toLowerCase().includes(q)))
+    .sort((a, b) => lastDate(b).localeCompare(lastDate(a)) || a.name.localeCompare(b.name))
 
   return (
     <>
@@ -86,10 +91,16 @@ export default function Lift() {
 }
 
 function ExerciseRow({ exercise, onOpen }: { exercise: Exercise; onOpen: () => void }) {
+  const store = useStore()
+  const today = todaySession(store, exercise.id)
+  const shown = today ?? lastSession(store, exercise.id)
   return (
     <button className="row" onClick={onOpen}>
-      <span>{exercise.name}</span>
-      <span className="cap">{exercise.default_unit}</span>
+      <span className="row-main">
+        <span>{exercise.name}</span>
+        <span className="cap">{today ? 'Done today' : shown ? fmtDate(shown.local_date) : 'Not logged yet'}</span>
+      </span>
+      {shown && <span className="num row-weights">{fmtSets(shown.sets)}</span>}
     </button>
   )
 }

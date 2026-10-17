@@ -136,3 +136,21 @@ select, .field {
 .day-card.past .day-groups { color: var(--ink); }
 .tag { font-size: 11px; font-weight: 600; color: var(--lift); background: var(--lift-soft); border-radius: 999px; padding: 2px 8px; }
 .day-edit { padding: 0 14px 14px; }
+
+/* Logging sets */
+.slab { background: var(--slab); color: var(--slab-fg); border-radius: 18px; padding: 16px; display: flex; flex-direction: column; gap: 6px; }
+.slab .cap { color: var(--slab-dim); }
+.slab-weights { font-size: 30px; line-height: 1.1; white-space: pre-wrap; }
+.set-row { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; gap: 8px; background: var(--card); border-radius: 14px; padding: 8px 10px; }
+.stepper { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; }
+.pm { width: 44px; height: 44px; border-radius: 12px; background: var(--chalk); font-size: 22px; font-weight: 600; flex: 0 0 auto; }
+.weight { width: 4.2em; min-width: 0; height: 44px; text-align: center; font-size: 24px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); font-family: var(--font); }
+.weight:focus { border-color: var(--line); background: var(--chalk); }
+.set-actions { display: flex; gap: 2px; }
+.unit-btn { min-width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.remove { width: 36px; height: 44px; color: var(--steel); }
+.row-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.row-weights { font-size: 15px; white-space: pre; color: var(--ink); }
+.edit-ex summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.edit-ex[open] { display: flex; flex-direction: column; gap: 12px; }
+.sync { font-size: 13px; background: var(--protein-track); color: var(--protein-text); border-radius: 12px; padding: 8px 12px; }

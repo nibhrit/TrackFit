@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadSplits, splitFor, toggleSplit, useStore } from '../data/store'
+import { groupsOn, loadSplits, splitFor, toggleSplit, useStore } from '../data/store'
 import { GROUPS } from '../data/types'
 import { addDays, fmtDate, fmtDay, localDate, weekDays, weekStart } from '../lib/dates'
 
@@ -33,7 +33,8 @@ export default function PlanWeek({ onBack }: { onBack: () => void }) {
 
       <div className="list">
         {days.map((d) => {
-          const groups = splitFor(store, d)
+          const groups = groupsOn(store, d)   // shown: picked + logged
+          const picked = splitFor(store, d)   // editable: picked only
           const isOpen = openDay === d
           return (
             <div key={d} className={`day-card${d === today ? ' today' : ''}${d < today ? ' past' : ''}`}>
@@ -50,7 +51,7 @@ export default function PlanWeek({ onBack }: { onBack: () => void }) {
               {isOpen && (
                 <div className="chips day-edit" role="group" aria-label={`Muscle groups for ${fmtDay(d)} ${fmtDate(d)}`}>
                   {GROUPS.map((g) => (
-                    <button key={g} className="chip" aria-pressed={groups.includes(g)} onClick={() => toggleSplit(g, d)}>{g}</button>
+                    <button key={g} className="chip" aria-pressed={picked.includes(g)} onClick={() => toggleSplit(g, d)}>{g}</button>
                   ))}
                 </div>
               )}

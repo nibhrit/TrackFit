@@ -1,30 +1,38 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
-import { STARTERS, type Exercise, type MuscleGroup, type Settings, type Splits, type Unit } from './types'
+import { STARTERS, type Exercise, type LiftSet, type MuscleGroup, type Session, type Settings, type Splits, type Unit } from './types'
 import { addDays, localDate } from '../lib/dates'
 
 // One shared store for the signed-in user's data.
 // Reads show the last known data instantly (cached on the device), then refresh from Supabase.
 // Writes update the screen first, then save; if saving fails, the change is rolled back.
+// Lift sessions are different: they go into an outbox on the device first and are sent when
+// there's a connection, so logging works with no signal (see "Outbox" below).
 
 type State = {
   loaded: boolean
   exercises: Exercise[]
   settings: Settings
   splits: Splits
+  sessions: Session[]   // newest first
+  pending: number       // changes saved on the device, not yet synced
 }
+
+type Op = { kind: 'save'; session: Session } | { kind: 'delete'; id: string }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
-const EMPTY: State = { loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {} }
+const EMPTY: State = { loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {}, sessions: [], pending: 0 }
 
 let state: State = EMPTY
 let toast: Toast | null = null
 let userId: string | null = null
+let outbox: Op[] = []
 const listeners = new Set<() => void>()
 
 const emit = () => listeners.forEach((l) => l())
 const cacheKey = () => `trackfit:${userId}`
+const outboxKey = () => `trackfit:${userId}:outbox`
 
 function set(patch: Partial<State>) {
   state = { ...state, ...patch }
@@ -56,24 +64,43 @@ export async function loadForUser(id: string) {
     try {
       const cached = localStorage.getItem(cacheKey())
       state = cached ? { ...EMPTY, ...JSON.parse(cached) } : EMPTY
-    } catch { state = EMPTY }
+      outbox = JSON.parse(localStorage.getItem(outboxKey()) ?? '[]')
+    } catch { state = EMPTY; outbox = [] }
+    state = { ...state, pending: outbox.length }
     emit()
   }
+  await flushOutbox()
   const today = localDate()
-  const [ex, st, sp] = await Promise.all([
+  const [ex, st, sp, ss] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
     supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
     fetchSplits(addDays(today, -42), addDays(today, 42)),
+    supabase.from('lift_sessions')
+      .select('id,exercise_id,performed_at,local_date,lift_sets(set_number,weight,unit)')
+      .gte('local_date', addDays(today, -365))
+      .order('performed_at', { ascending: false }),
   ])
-  if (ex.error || st.error || !sp) {
+  if (ex.error || st.error || !sp || ss.error) {
     if (!state.loaded) showToast('Couldn’t load your data. Showing what’s saved on this device.')
     return
   }
-  set({ loaded: true, exercises: ex.data as Exercise[], settings: (st.data as Settings) ?? state.settings, splits: sp })
+  type Row = Omit<Session, 'sets'> & { lift_sets: LiftSet[] }
+  const sessions = (ss.data as Row[]).map(({ lift_sets, ...s }) => ({
+    ...s,
+    sets: lift_sets.map((x) => ({ ...x, weight: Number(x.weight) })).sort((a, b) => a.set_number - b.set_number),
+  }))
+  set({
+    loaded: true,
+    exercises: ex.data as Exercise[],
+    settings: (st.data as Settings) ?? state.settings,
+    splits: sp,
+    sessions: applyOutbox(sessions), // keep unsynced changes on top of what the server has
+  })
 }
 
 export function clearUser() {
   userId = null
+  outbox = []
   state = EMPTY
   emit()
 }
@@ -161,6 +188,112 @@ export async function toggleSplit(group: MuscleGroup, date = localDate()) {
     set({ splits: before })
     showToast('Couldn’t save the split. Check your connection.')
   }
+}
+
+// ---------- Lift sessions ----------
+
+const newest = (list: Session[]) => [...list].sort((a, b) => b.performed_at.localeCompare(a.performed_at))
+
+function upsertLocal(list: Session[], s: Session) {
+  return newest([...list.filter((x) => x.id !== s.id), s])
+}
+
+export function saveSession(exercise_id: string, sets: LiftSet[], existingId?: string) {
+  const session: Session = {
+    id: existingId ?? crypto.randomUUID(),
+    exercise_id,
+    performed_at: new Date().toISOString(),
+    local_date: localDate(),
+    sets: sets.map((s, i) => ({ ...s, set_number: i + 1 })),
+  }
+  set({ sessions: upsertLocal(state.sessions, session) })
+  enqueue({ kind: 'save', session })
+}
+
+export function deleteSession(id: string) {
+  const s = state.sessions.find((x) => x.id === id)
+  set({ sessions: state.sessions.filter((x) => x.id !== id) })
+  enqueue({ kind: 'delete', id })
+  if (s) showToast('Session deleted', () => {
+    set({ sessions: upsertLocal(state.sessions, s) })
+    enqueue({ kind: 'save', session: s })
+  })
+}
+
+// Selectors
+export const sessionsFor = (s: State, exerciseId: string) => s.sessions.filter((x) => x.exercise_id === exerciseId)
+export const todaySession = (s: State, exerciseId: string) =>
+  s.sessions.find((x) => x.exercise_id === exerciseId && x.local_date === localDate())
+export const lastSession = (s: State, exerciseId: string) =>
+  s.sessions.find((x) => x.exercise_id === exerciseId && x.local_date < localDate())
+
+// A day's groups: the split picked for it plus the groups of anything logged that day
+export function groupsOn(s: State, date: string): MuscleGroup[] {
+  const logged = s.sessions
+    .filter((x) => x.local_date === date)
+    .map((x) => s.exercises.find((e) => e.id === x.exercise_id)?.muscle_group)
+    .filter((g): g is MuscleGroup => !!g)
+  return [...new Set([...splitFor(s, date), ...logged])]
+}
+
+// ---------- Outbox (offline-first saves) ----------
+// Each change is stored on the device, then sent in order. A network failure leaves it queued
+// for the next try (app open, back online, or every 20 s). A change the server refuses
+// (e.g. invalid data) is dropped with a message so it can't block everything behind it.
+
+let flushing = false
+
+function enqueue(op: Op) {
+  // A newer save or delete of the same session replaces any queued one
+  const id = op.kind === 'save' ? op.session.id : op.id
+  outbox = [...outbox.filter((o) => (o.kind === 'save' ? o.session.id : o.id) !== id), op]
+  persistOutbox()
+  flushOutbox()
+}
+
+function persistOutbox() {
+  try { localStorage.setItem(outboxKey(), JSON.stringify(outbox)) } catch { /* storage full or blocked */ }
+  set({ pending: outbox.length })
+}
+
+function applyOutbox(sessions: Session[]) {
+  return outbox.reduce(
+    (list, op) => (op.kind === 'save' ? upsertLocal(list, op.session) : list.filter((x) => x.id !== op.id)),
+    sessions,
+  )
+}
+
+const isNetworkError = (e: { code?: string; message?: string }) =>
+  !e.code || /fetch|network|load failed/i.test(e.message ?? '')
+
+export async function flushOutbox() {
+  if (flushing || !outbox.length || !userId) return
+  flushing = true
+  try {
+    while (outbox.length) {
+      const op = outbox[0]
+      const { error } = op.kind === 'save'
+        ? await supabase.rpc('save_lift_session', {
+            p_id: op.session.id,
+            p_exercise_id: op.session.exercise_id,
+            p_performed_at: op.session.performed_at,
+            p_local_date: op.session.local_date,
+            p_sets: op.session.sets,
+          })
+        : await supabase.from('lift_sessions').delete().eq('id', op.id)
+      if (error && isNetworkError(error)) break
+      if (error) showToast('One change couldn’t be saved and was discarded. Check the session and log it again.')
+      outbox = outbox.slice(1)
+      persistOutbox()
+    }
+  } finally {
+    flushing = false
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => flushOutbox())
+  setInterval(() => flushOutbox(), 20_000)
 }
 
 const sortByName = (list: Exercise[]) => [...list].sort((a, b) => a.name.localeCompare(b.name))

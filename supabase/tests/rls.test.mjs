@@ -52,6 +52,21 @@ await as(A, `insert into daily_splits(date,groups) values ('2026-10-17','{Back,B
 const sp=(await as(A,`select date::text d, groups::text g from daily_splits order by date`)).rows
 JSON.stringify(sp)==='[{"d":"2026-10-13","g":"{Chest,Triceps}"},{"d":"2026-10-17","g":"{Back,Biceps}"}]'?ok('daily splits: one per day, upsert replaces'):bad(JSON.stringify(sp))
 const spB=(await as(B,`select count(*)::int c from daily_splits`)).rows[0].c; spB===0?ok('B sees 0 of A\'s splits'):bad('B sees A splits')
+// save_lift_session RPC: atomic, idempotent, RLS-respecting
+const sid='aaaaaaaa-0000-0000-0000-000000000001'
+const rpc=(u,sets,id=sid,exid=ex)=>as(u, `select public.save_lift_session('${id}','${exid}','2026-10-17T10:00:00Z','2026-10-17','${JSON.stringify(sets)}'::jsonb)`)
+await rpc(A,[{set_number:1,weight:60,unit:'kg'},{set_number:2,weight:25,unit:'lb'}])
+await rpc(A,[{set_number:1,weight:62.5,unit:'kg'},{set_number:2,weight:62.5,unit:'kg'},{set_number:3,weight:65,unit:'kg'}])
+const rs=(await as(A,`select set_number, weight::text w, unit from lift_sets where session_id='${sid}' order by set_number`)).rows
+const rc=(await as(A,`select count(*)::int c from lift_sessions where id='${sid}'`)).rows[0].c
+;(rc===1 && JSON.stringify(rs.map(r=>r.w+r.unit))==='["62.50kg","62.50kg","65.00kg"]')?ok('RPC: resave replaces sets, no duplicate session'):bad(JSON.stringify(rs))
+try { await rpc(A,[{set_number:1,weight:-5,unit:'kg'}]); bad('negative weight saved') } catch { const after=(await as(A,`select count(*)::int c from lift_sets where session_id='${sid}'`)).rows[0].c; after===3?ok('RPC: failed save rolls back (sets unchanged)'):bad('partial save '+after) }
+try { await rpc(A,[]); bad('empty session saved') } catch { ok('RPC: empty session refused') }
+try { await rpc(B,[{set_number:1,weight:100,unit:'kg'}]); bad('B overwrote A session via RPC') } catch { ok('RPC: B cannot overwrite A\'s session') }
+const exB=(await as(B,`insert into exercises(name,muscle_group) values ('B row','Back') returning id`)).rows[0].id
+try { await rpc(B,[{set_number:1,weight:1,unit:'kg'}],'bbbbbbbb-0000-0000-0000-000000000001',ex); bad('B logged into A exercise') } catch { ok('RPC: B cannot log to A\'s exercise') }
+await rpc(B,[{set_number:1,weight:1,unit:'kg'}],'bbbbbbbb-0000-0000-0000-000000000002',exB); ok('RPC: B logs to own exercise')
+await db.exec('set role anon'); try { await db.query(`select public.save_lift_session('${sid}','${ex}',now(),'2026-10-17','[{"set_number":1,"weight":1,"unit":"kg"}]')`); bad('anon called RPC') } catch { ok('RPC: anon cannot call') } finally { await db.exec('reset role') }
 try { await as(A, `insert into protein_goals(goal_g,effective_from) values (5,'2026-10-16')`); bad('goal 5 allowed') } catch { ok('goal bounds enforced') }
 // anon gets nothing
 await db.exec('set role anon'); try { await db.query('select * from exercises'); bad('anon read') } catch { ok('anon cannot read') } finally { await db.exec('reset role') }

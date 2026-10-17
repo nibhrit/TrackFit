@@ -15,6 +15,19 @@ export type Settings = {
   body_weight_unit: Unit
 }
 
+export type LiftSet = { set_number: number; weight: number; unit: Unit }
+
+export type Session = {
+  id: string
+  exercise_id: string
+  performed_at: string
+  local_date: string
+  sets: LiftSet[]
+}
+
+// Smallest common plate / dumbbell jump
+export const STEP: Record<Unit, number> = { kg: 2.5, lb: 5 }
+
 // Muscle groups per local date ('YYYY-MM-DD'): past = trained, future = planned
 export type Splits = Record<string, MuscleGroup[]>
 
