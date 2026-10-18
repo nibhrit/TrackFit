@@ -36,6 +36,9 @@ type Op =
   | { kind: 'habit_save'; day: DayHabits }
   | { kind: 'weight_save'; entry: BodyWeight }
   | { kind: 'weight_delete'; date: string }
+  | { kind: 'goal_save'; goal: ProteinGoal }
+  | { kind: 'split_save'; date: string; groups: MuscleGroup[] }
+  | { kind: 'settings_save'; settings: Settings }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
@@ -118,12 +121,12 @@ export async function loadForUser(id: string) {
   set({
     loaded: true,
     exercises: ex.data as Exercise[],
-    settings: (st.data as Settings) ?? state.settings,
-    splits: sp,
+    settings: applySettingsOutbox((st.data as Settings) ?? state.settings),
+    splits: applySplitOutbox(sp),
     sessions: applyLiftOutbox(sessions), // keep unsynced changes on top of what the server has
     protein: applyProteinOutbox(pe.data as ProteinEntry[]),
     quickAdds: qa.data as QuickAdd[],
-    goals: pg.data as ProteinGoal[],
+    goals: applyGoalOutbox(pg.data as ProteinGoal[]),
     habits: applyHabitOutbox(Object.fromEntries((hb.data as DayHabits[]).map((d) => [d.date, d]))),
     weights: applyWeightOutbox((bw.data as BodyWeight[]).map((w) => ({ ...w, weight: Number(w.weight) }))),
   })
@@ -203,22 +206,16 @@ async function fetchSplits(from: string, to: string): Promise<Splits | null> {
 // Load another week's splits (week arrows on Plan week)
 export async function loadSplits(from: string, to: string) {
   const sp = await fetchSplits(from, to)
-  if (sp) set({ splits: { ...state.splits, ...sp } })
+  if (sp) set({ splits: applySplitOutbox({ ...state.splits, ...sp }) })
 }
 
 export const splitFor = (s: State, date: string) => s.splits[date] ?? []
 
-export async function toggleSplit(group: MuscleGroup, date = localDate()) {
+export function toggleSplit(group: MuscleGroup, date = localDate()) {
   const current = splitFor(state, date)
   const groups = current.includes(group) ? current.filter((g) => g !== group) : [...current, group]
-  const before = state.splits
-  set({ splits: { ...before, [date]: groups } })
-  const { error } = await supabase.from('daily_splits')
-    .upsert({ date, groups, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
-  if (error) {
-    set({ splits: before })
-    showToast('Couldn’t save the split. Check your connection.')
-  }
+  set({ splits: { ...state.splits, [date]: groups } })
+  enqueue({ kind: 'split_save', date, groups })
 }
 
 // ---------- Lift sessions ----------
@@ -297,7 +294,22 @@ function opKey(op: Op) {
     case 'habit_save': return `habit:${op.day.date}`
     case 'weight_save': return `weight:${op.entry.date}`
     case 'weight_delete': return `weight:${op.date}`
+    case 'goal_save': return `goal:${op.goal.effective_from}`
+    case 'split_save': return `split:${op.date}`
+    case 'settings_save': return 'settings'
   }
+}
+
+function applyGoalOutbox(goals: ProteinGoal[]) {
+  return outbox.reduce((list, op) => (op.kind === 'goal_save' ? upsertGoal(list, op.goal) : list), goals)
+}
+
+function applySplitOutbox(splits: Splits) {
+  return outbox.reduce((sp, op) => (op.kind === 'split_save' ? { ...sp, [op.date]: op.groups } : sp), splits)
+}
+
+function applySettingsOutbox(settings: Settings) {
+  return outbox.reduce((s, op) => (op.kind === 'settings_save' ? op.settings : s), settings)
 }
 
 function applyHabitOutbox(habits: Record<string, DayHabits>) {
@@ -344,6 +356,12 @@ function send(op: Op) {
       return supabase.from('body_weights').upsert({ ...op.entry, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
     case 'weight_delete':
       return supabase.from('body_weights').delete().eq('date', op.date)
+    case 'goal_save':
+      return supabase.from('protein_goals').upsert(op.goal, { onConflict: 'user_id,effective_from' })
+    case 'split_save':
+      return supabase.from('daily_splits').upsert({ date: op.date, groups: op.groups, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
+    case 'settings_save':
+      return supabase.from('user_settings').update({ body_weight_unit: op.settings.body_weight_unit, updated_at: new Date().toISOString() }).eq('user_id', userId!)
   }
 }
 
@@ -419,15 +437,16 @@ export function deleteProtein(id: string) {
 }
 
 // Applies from today onward; earlier days keep the goal they had
-export async function setGoal(goal_g: number): Promise<string | null> {
+export function setGoal(goal_g: number): string | null {
   if (!Number.isInteger(goal_g) || goal_g < 20 || goal_g > 400) return 'Enter a goal between 20 and 400 g.'
-  const effective_from = localDate()
-  const before = state.goals
-  set({ goals: [...before.filter((g) => g.effective_from !== effective_from), { goal_g, effective_from }].sort((a, b) => a.effective_from.localeCompare(b.effective_from)) })
-  const { error } = await supabase.from('protein_goals').upsert({ goal_g, effective_from }, { onConflict: 'user_id,effective_from' })
-  if (error) { set({ goals: before }); return 'Couldn’t save the goal. Check your connection.' }
+  const goal = { goal_g, effective_from: localDate() }
+  set({ goals: upsertGoal(state.goals, goal) })
+  enqueue({ kind: 'goal_save', goal })
   return null
 }
+
+const upsertGoal = (list: ProteinGoal[], g: ProteinGoal) =>
+  [...list.filter((x) => x.effective_from !== g.effective_from), g].sort((a, b) => a.effective_from.localeCompare(b.effective_from))
 
 // Quick-adds: saved foods. Changed rarely, so saved directly (with rollback) rather than via the outbox.
 const validFood = (name: string, grams: number) =>
@@ -518,11 +537,10 @@ export function deleteWeight(date: string) {
   showToast('Weight deleted', () => logWeight(w.weight, w.unit, w.date))
 }
 
-export async function setWeightUnit(unit: Unit) {
-  const before = state.settings
-  set({ settings: { ...before, body_weight_unit: unit } })
-  const { error } = await supabase.from('user_settings').update({ body_weight_unit: unit, updated_at: new Date().toISOString() }).eq('user_id', userId!)
-  if (error) { set({ settings: before }); showToast('Couldn’t save the unit. Check your connection.') }
+export function setWeightUnit(unit: Unit) {
+  const settings = { ...state.settings, body_weight_unit: unit }
+  set({ settings })
+  enqueue({ kind: 'settings_save', settings })
 }
 
 // ---------- Insights ----------

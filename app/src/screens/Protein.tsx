@@ -34,7 +34,7 @@ export default function Protein() {
       )}
 
       <SavedFoods quickAdds={store.quickAdds} />
-      <GoalSetting key={goalFor(store, today)} current={goalFor(store, today)} />
+      <GoalSetting current={goalFor(store, today)} />
     </>
   )
 }
@@ -199,11 +199,18 @@ function FoodRow({ food, first, last }: { food: QuickAdd; first: boolean; last: 
 
 function GoalSetting({ current }: { current: number }) {
   const [value, setValue] = useState(String(current))
+  const [base, setBase] = useState(current)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
 
-  async function save(e: React.FormEvent) {
+  // If the goal changes elsewhere (loaded, synced from another device), show it unless you're mid-edit
+  if (current !== base) {
+    setBase(current)
+    if (value === String(base)) setValue(String(current))
+  }
+
+  function save(e: React.FormEvent) {
     e.preventDefault()
-    const err = await setGoal(toInt(value))
+    const err = setGoal(toInt(value))
     setMsg(err ? { ok: false, text: err } : { ok: true, text: 'Saved. Applies from today.' })
   }
 
