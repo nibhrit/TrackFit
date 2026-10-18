@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  deleteWeight, goalFor, habitsOn, logWeight, loggedOn, proteinTotal, streak, useStore,
+  bodyKg, deleteWeight, goalFor, habitsOn, kcalOn, logWeight, loggedOn, proteinTotal, streak, useStore,
 } from '../data/store'
 import Header from '../components/Header'
 import type { BodyWeight, HabitKey, Unit } from '../data/types'
@@ -32,6 +32,7 @@ export default function Week() {
       <p className="cap legend">Filled: avoided · Ring: had it · Dashed: not logged</p>
 
       <ProteinCard />
+      <KcalCard days={days} today={today} />
       <BodyWeightCard />
     </>
   )
@@ -75,6 +76,38 @@ function HabitGrid({ days, today }: { days: string[]; today: string }) {
           ))}
         </div>
       ))}
+    </div>
+  )
+}
+
+// Estimated calories burnt per day this week, in graphite (blue/yellow/green are taken)
+function KcalCard({ days, today }: { days: string[]; today: string }) {
+  const store = useStore()
+  const [active, setActive] = useState(today)
+  const rows = days.map((d) => ({ d, ...kcalOn(store, d) }))
+  const max = Math.max(1, ...rows.map((r) => r.total)) * 1.1
+  const shown = rows.find((r) => r.d === active)!
+  const week = rows.reduce((s, r) => s + r.total, 0)
+  return (
+    <div className="card form">
+      <div className="card-top">
+        <b>Calories burnt</b>
+        <span className="cap">about {week} kcal this week</span>
+      </div>
+      <span className="cap">
+        <span className="trend-read">{fmtDate(shown.d)}: <b>about {shown.total} kcal</b></span>
+        {shown.total > 0 && ` · cardio ${shown.cardio}, lifting ${shown.lifting}`}
+      </span>
+      <div className="bars kcal" role="img" aria-label={`Estimated calories burnt per day this week, about ${week} in total`}>
+        {rows.map((r) => (
+          <button key={r.d} className={`bar-hit${r.d === shown.d ? ' active' : ''}`} disabled={r.d > today}
+            aria-label={`${fmtDate(r.d)}: about ${r.total} kcal`} onClick={() => setActive(r.d)}>
+            <span className="bar" style={{ height: `${r.d > today ? 0 : Math.max(2, (r.total / max) * 100)}%` }} />
+          </button>
+        ))}
+      </div>
+      <div className="bar-lbl">{rows.map((r) => <span key={r.d}>{fmtDay(r.d).slice(0, 2)}</span>)}</div>
+      <span className="cap">Estimates{bodyKg(store).estimated ? ', using 70 kg until you log your weight' : ''}. Lifting counts about 3 minutes per set.</span>
     </div>
   )
 }

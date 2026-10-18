@@ -44,6 +44,17 @@ export type HabitKey = 'sugar' | 'junk_food'
 export type DayHabits = { date: string; sugar: HabitResult | null; junk_food: HabitResult | null }
 export type BodyWeight = { date: string; weight: number; unit: Unit }
 
+export type CardioKind = 'treadmill_run' | 'treadmill_walk' | 'cycling' | 'elliptical' | 'rowing' | 'stair_climber' | 'swimming' | 'other'
+export type Effort = 'easy' | 'moderate' | 'hard'
+export type Cardio = { id: string; kind: CardioKind; minutes: number; effort: Effort; performed_at: string; local_date: string }
+
+export const CARDIO_KINDS: [CardioKind, string][] = [
+  ['treadmill_run', 'Treadmill run'], ['treadmill_walk', 'Treadmill walk'], ['cycling', 'Cycling'],
+  ['elliptical', 'Elliptical'], ['rowing', 'Rowing'], ['stair_climber', 'Stair climber'],
+  ['swimming', 'Swimming'], ['other', 'Other'],
+]
+export const cardioName = (k: CardioKind) => CARDIO_KINDS.find(([id]) => id === k)?.[1] ?? 'Cardio'
+
 // Offered once on an empty list; approximate values, editable
 export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams'>[] = [
   { name: 'Whey scoop', grams: 24 },

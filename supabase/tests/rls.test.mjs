@@ -67,6 +67,15 @@ const exB=(await as(B,`insert into exercises(name,muscle_group) values ('B row',
 try { await rpc(B,[{set_number:1,weight:1,unit:'kg'}],'bbbbbbbb-0000-0000-0000-000000000001',ex); bad('B logged into A exercise') } catch { ok('RPC: B cannot log to A\'s exercise') }
 await rpc(B,[{set_number:1,weight:1,unit:'kg'}],'bbbbbbbb-0000-0000-0000-000000000002',exB); ok('RPC: B logs to own exercise')
 await db.exec('set role anon'); try { await db.query(`select public.save_lift_session('${sid}','${ex}',now(),'2026-10-17','[{"set_number":1,"weight":1,"unit":"kg"}]')`); bad('anon called RPC') } catch { ok('RPC: anon cannot call') } finally { await db.exec('reset role') }
+// Cardio
+const cid='cccccccc-0000-0000-0000-000000000001'
+await as(A, `insert into cardio_sessions(id,kind,minutes,effort,local_date) values ('${cid}','treadmill_run',30,'hard','2026-10-19')`)
+await as(A, `insert into cardio_sessions(id,kind,minutes,effort,local_date) values ('${cid}','treadmill_run',35,'hard','2026-10-19') on conflict (id) do update set minutes=excluded.minutes`)
+const cr=(await as(A,`select minutes from cardio_sessions`)).rows; (cr.length===1&&cr[0].minutes===35)?ok('cardio: upsert by id replaces'):bad(JSON.stringify(cr))
+const crB=(await as(B,`select count(*)::int c from cardio_sessions`)).rows[0].c; crB===0?ok('cardio: B sees 0 of A\'s sessions'):bad('B sees A cardio')
+try { await as(A, `insert into cardio_sessions(kind,minutes,local_date) values ('cycling',0,'2026-10-19')`); bad('0 minutes allowed') } catch { ok('cardio: minutes must be 1 to 600') }
+try { await as(A, `insert into cardio_sessions(kind,minutes,local_date) values ('skipping',10,'2026-10-19')`); bad('unknown kind allowed') } catch { ok('cardio: unknown type refused') }
+await db.exec('set role anon'); try { await db.query('select * from cardio_sessions'); bad('anon read cardio') } catch { ok('cardio: anon cannot read') } finally { await db.exec('reset role') }
 try { await as(A, `insert into protein_goals(goal_g,effective_from) values (5,'2026-10-16')`); bad('goal 5 allowed') } catch { ok('goal bounds enforced') }
 // anon gets nothing
 await db.exec('set role anon'); try { await db.query('select * from exercises'); bad('anon read') } catch { ok('anon cannot read') } finally { await db.exec('reset role') }

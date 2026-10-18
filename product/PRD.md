@@ -138,6 +138,16 @@ Priorities: **P0** = must-have for launch · **P1** = should-have for launch · 
 
 ---
 
+## 6.6 v1.1 additions
+
+| ID | Requirement | Priority | Jira |
+|---|---|---|---|
+| C1 | **Cardio tab:** log type (treadmill run / walk, cycling, elliptical, rowing, stair climber, swimming, other), minutes and effort (Easy / Moderate / Hard). One-tap repeat of recent sessions. Saves on the phone first | P0 | TF-34 |
+| C2 | **Calories burnt (estimate):** kcal = MET × latest body weight (kg) × hours. Cardio MET by type and effort; lifting ≈ 3 min per set at MET 5. Today tile (tap for cardio vs lifting) and Week bars. Labelled "about"; 70 kg default until a weigh-in | P1 | TF-35 |
+| U1 | **Declutter:** one header with Settings everywhere; setup (saved foods, goal, weight unit) moved to Settings; Today summary tiles; End of day card from 6 pm; one week grid for logged / sugar / junk | P0 | TF-32 |
+
+Note: v1 excluded calories *eaten*. Calories *burnt* is new v1.1 scope.
+
 ## 7. Key user flows
 
 **Flow A: At the gym (P1)**
@@ -227,6 +237,9 @@ Every table carries `user_id`, and row-level security restricts each user to the
 | D10 | Plan week placement | Behind a "Plan week" button on Lift | Keeps the gym-time Lift page uncluttered |
 | D11 | Starter exercises | Offered with one tap on an empty list, not auto-added | Auto-adding would silently restore exercises a user had deleted |
 | D8 | Body weight chart colour | Neutral graphite line | Blue, yellow and green already mean lifting, protein and habits |
+| D12 | Calories burnt | MET estimate, shown as "about N kcal", graphite | Good enough to compare days; honest about ±20–30% error; no fourth colour |
+| D13 | Lifting calories | From sets (~3 min each) | No extra input; duration isn't tracked |
+| D14 | End of day card | Shows from 6 pm (or once a habit is logged / tile tapped) | Can't answer "did I avoid sugar today?" in the morning |
 | D4 | ± increments | **2.5 kg / 5 lb**, editable when typing | Matches the smallest common plate and dumbbell jumps |
 
 ---

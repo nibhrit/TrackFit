@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { goalFor, groupsOn, habitsOn, lastSession, proteinTotal, todaySession, useStore } from '../data/store'
+import { goalFor, groupsOn, habitsOn, kcalOn, lastSession, proteinTotal, todaySession, useStore } from '../data/store'
 import { GROUPS, type Exercise } from '../data/types'
 import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets } from '../lib/format'
@@ -39,6 +39,7 @@ export default function Today({ onOpenExercise, onGoToLift, onGoToProtein }: Pro
 
       <div className="tiles">
         <ProteinTile onOpen={onGoToProtein} />
+        <KcalTile />
         <button className="tile" onClick={() => setShowHabits(true)} aria-label={`Habits: ${habitsDone} of 2 logged today`}>
           <span className="num tile-num habit-num">{habitsDone}<span className="tile-of">/2</span></span>
           <span className="cap">habits</span>
@@ -84,6 +85,19 @@ export default function Today({ onOpenExercise, onGoToLift, onGoToProtein }: Pro
   )
 }
 
+// Estimated calories burnt today; tap to see cardio vs lifting
+function KcalTile() {
+  const store = useStore()
+  const [split, setSplit] = useState(false)
+  const k = kcalOn(store, localDate())
+  return (
+    <button className="tile" onClick={() => setSplit(!split)} aria-label={`About ${k.total} kilocalories burnt today`}>
+      <span className="num tile-num">{k.total}</span>
+      <span className="cap">{split ? `cardio ${k.cardio} · lift ${k.lifting}` : 'kcal burnt'}</span>
+    </button>
+  )
+}
+
 function ProteinTile({ onOpen }: { onOpen: () => void }) {
   const store = useStore()
   const today = localDate()
@@ -95,7 +109,7 @@ function ProteinTile({ onOpen }: { onOpen: () => void }) {
     <button className="tile tile-ring" onClick={onOpen} aria-label={`Protein: ${total} of ${goal} grams`}>
       <svg width="40" height="40" viewBox="0 0 100 100" aria-hidden="true">
         <circle cx="50" cy="50" r="40" className="ring-track" style={{ strokeWidth: 14 }} />
-        <circle cx="50" cy="50" r="40" className="ring-fill" style={{ strokeWidth: 14 }} strokeDasharray={`${filled.toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 50 50)" />
+        {filled > 0 && <circle cx="50" cy="50" r="40" className="ring-fill" style={{ strokeWidth: 14 }} strokeDasharray={`${filled.toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 50 50)" />}
       </svg>
       <span>
         <span className="num tile-num">{total}<span className="tile-of"> g</span></span>

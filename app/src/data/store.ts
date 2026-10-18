@@ -2,11 +2,13 @@ import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import {
   DEFAULT_GOAL, STARTERS, STARTER_FOODS,
-  type BodyWeight, type DayHabits, type Exercise, type HabitKey, type HabitResult, type LiftSet,
+  type BodyWeight, type Cardio, type DayHabits, type Exercise, type HabitKey, type HabitResult, type LiftSet,
   type MuscleGroup, type ProteinEntry, type ProteinGoal, type QuickAdd,
   type Session, type Settings, type Splits, type Unit,
 } from './types'
+import type { CardioKind, Effort } from './types'
 import { addDays, localDate } from '../lib/dates'
+import { DEFAULT_BODY_KG, cardioKcal, liftKcal } from '../lib/calories'
 
 // One shared store for the signed-in user's data.
 // Reads show the last known data instantly (cached on the device), then refresh from Supabase.
@@ -25,6 +27,7 @@ type State = {
   goals: ProteinGoal[]
   habits: Record<string, DayHabits>   // by date
   weights: BodyWeight[]               // oldest first
+  cardio: Cardio[]                    // oldest first
   pending: number       // changes saved on the device, not yet synced
 }
 
@@ -39,12 +42,14 @@ type Op =
   | { kind: 'goal_save'; goal: ProteinGoal }
   | { kind: 'split_save'; date: string; groups: MuscleGroup[] }
   | { kind: 'settings_save'; settings: Settings }
+  | { kind: 'cardio_save'; entry: Cardio }
+  | { kind: 'cardio_delete'; id: string }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
 const EMPTY: State = {
   loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {}, sessions: [],
-  protein: [], quickAdds: [], goals: [], habits: {}, weights: [], pending: 0,
+  protein: [], quickAdds: [], goals: [], habits: {}, weights: [], cardio: [], pending: 0,
 }
 
 let state: State = EMPTY
@@ -94,7 +99,7 @@ export async function loadForUser(id: string) {
   }
   await flushOutbox()
   const today = localDate()
-  const [ex, st, sp, ss, pe, qa, pg, hb, bw] = await Promise.all([
+  const [ex, st, sp, ss, pe, qa, pg, hb, bw, cd] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
     supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
     fetchSplits(addDays(today, -42), addDays(today, 42)),
@@ -108,8 +113,10 @@ export async function loadForUser(id: string) {
     supabase.from('protein_goals').select('goal_g,effective_from').order('effective_from'),
     supabase.from('daily_habits').select('date,sugar,junk_food').gte('date', addDays(today, -100)),
     supabase.from('body_weights').select('date,weight,unit').gte('date', addDays(today, -400)).order('date'),
+    supabase.from('cardio_sessions').select('id,kind,minutes,effort,performed_at,local_date')
+      .gte('local_date', addDays(today, -120)).order('performed_at'),
   ])
-  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error || hb.error || bw.error) {
+  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error || hb.error || bw.error || cd.error) {
     if (!state.loaded) showToast('Couldn’t load your data. Showing what’s saved on this device.')
     return
   }
@@ -129,6 +136,7 @@ export async function loadForUser(id: string) {
     goals: applyGoalOutbox(pg.data as ProteinGoal[]),
     habits: applyHabitOutbox(Object.fromEntries((hb.data as DayHabits[]).map((d) => [d.date, d]))),
     weights: applyWeightOutbox((bw.data as BodyWeight[]).map((w) => ({ ...w, weight: Number(w.weight) }))),
+    cardio: applyCardioOutbox(cd.data as Cardio[]),
   })
 }
 
@@ -297,7 +305,15 @@ function opKey(op: Op) {
     case 'goal_save': return `goal:${op.goal.effective_from}`
     case 'split_save': return `split:${op.date}`
     case 'settings_save': return 'settings'
+    case 'cardio_save': return `cardio:${op.entry.id}`
+    case 'cardio_delete': return `cardio:${op.id}`
   }
+}
+
+function applyCardioOutbox(list: Cardio[]) {
+  return outbox.reduce((l, op) =>
+    op.kind === 'cardio_save' ? upsertCardio(l, op.entry) : op.kind === 'cardio_delete' ? l.filter((x) => x.id !== op.id) : l,
+  list)
 }
 
 function applyGoalOutbox(goals: ProteinGoal[]) {
@@ -360,6 +376,10 @@ function send(op: Op) {
       return supabase.from('protein_goals').upsert(op.goal, { onConflict: 'user_id,effective_from' })
     case 'split_save':
       return supabase.from('daily_splits').upsert({ date: op.date, groups: op.groups, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
+    case 'cardio_save':
+      return supabase.from('cardio_sessions').upsert(op.entry)
+    case 'cardio_delete':
+      return supabase.from('cardio_sessions').delete().eq('id', op.id)
     case 'settings_save':
       return supabase.from('user_settings').update({ body_weight_unit: op.settings.body_weight_unit, updated_at: new Date().toISOString() }).eq('user_id', userId!)
   }
@@ -543,6 +563,59 @@ export function setWeightUnit(unit: Unit) {
   enqueue({ kind: 'settings_save', settings })
 }
 
+// ---------- Cardio ----------
+
+const upsertCardio = (list: Cardio[], c: Cardio) =>
+  [...list.filter((x) => x.id !== c.id), c].sort((a, b) => a.performed_at.localeCompare(b.performed_at))
+
+export const cardioOn = (s: State, date: string) => s.cardio.filter((c) => c.local_date === date)
+
+export function logCardio(kind: CardioKind, minutes: number, effort: Effort) {
+  const entry: Cardio = { id: crypto.randomUUID(), kind, minutes, effort, performed_at: new Date().toISOString(), local_date: localDate() }
+  set({ cardio: upsertCardio(state.cardio, entry) })
+  enqueue({ kind: 'cardio_save', entry })
+  showToast(`Logged ${minutes} min`, () => {
+    set({ cardio: state.cardio.filter((x) => x.id !== entry.id) })
+    enqueue({ kind: 'cardio_delete', id: entry.id })
+  })
+}
+
+export function updateCardio(id: string, patch: Partial<Pick<Cardio, 'kind' | 'minutes' | 'effort'>>) {
+  const c = state.cardio.find((x) => x.id === id)
+  if (!c) return
+  const entry = { ...c, ...patch }
+  set({ cardio: upsertCardio(state.cardio, entry) })
+  enqueue({ kind: 'cardio_save', entry })
+}
+
+export function deleteCardio(id: string) {
+  const c = state.cardio.find((x) => x.id === id)
+  if (!c) return
+  set({ cardio: state.cardio.filter((x) => x.id !== id) })
+  enqueue({ kind: 'cardio_delete', id })
+  showToast('Cardio deleted', () => {
+    set({ cardio: upsertCardio(state.cardio, c) })
+    enqueue({ kind: 'cardio_save', entry: c })
+  })
+}
+
+// ---------- Calories burnt (estimate) ----------
+
+// Latest weigh-in in kg, or a default until there is one
+export function bodyKg(s: State): { kg: number; estimated: boolean } {
+  const w = s.weights[s.weights.length - 1]
+  if (!w) return { kg: DEFAULT_BODY_KG, estimated: true }
+  return { kg: w.unit === 'lb' ? w.weight * 0.45359237 : w.weight, estimated: false }
+}
+
+export function kcalOn(s: State, date: string) {
+  const { kg } = bodyKg(s)
+  const cardio = cardioOn(s, date).reduce((sum, c) => sum + cardioKcal(c.kind, c.effort, c.minutes, kg), 0)
+  const sets = s.sessions.filter((x) => x.local_date === date).reduce((n, x) => n + x.sets.length, 0)
+  const lifting = liftKcal(sets, kg)
+  return { cardio: Math.round(cardio), lifting: Math.round(lifting), total: Math.round(cardio + lifting) }
+}
+
 // ---------- Insights ----------
 
 // A day counts as logged if anything was recorded: a lift, protein, a habit answer or body weight
@@ -552,6 +625,7 @@ export function loggedOn(s: State, date: string) {
     || s.protein.some((x) => x.local_date === date)
     || !!(h && (h.sugar || h.junk_food))
     || s.weights.some((w) => w.date === date)
+    || s.cardio.some((c) => c.local_date === date)
 }
 
 // Consecutive logged days ending today (or yesterday, if today isn't logged yet)

@@ -253,3 +253,11 @@ main { gap: 12px; }
 .mini.none { border-style: dashed; border-color: var(--steel); }
 .mini.future { border-color: transparent; background: var(--line); opacity: 0.4; transform: scale(0.5); }
 .legend { margin: -4px 2px 0; }
+.tiles { grid-template-columns: 1.35fr 1fr 1fr; }
+.tiles .tile-ring svg { flex: 0 0 auto; }
+.seg { grid-auto-flow: column; grid-auto-columns: 1fr; grid-template-columns: none; }
+.habit-row .seg { grid-template-columns: 1fr 1fr; }
+nav.tabs { grid-template-columns: repeat(5, 1fr); }
+.bars.kcal { height: 96px; }
+.bars.kcal .bar { background: var(--ink); opacity: 0.75; }
+.bars.kcal .bar-hit:disabled { cursor: default; }

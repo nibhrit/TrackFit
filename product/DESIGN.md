@@ -29,6 +29,7 @@ Clickable prototype: [`prototype.html`](prototype.html)
 | `lift` | `#2F5BE0` | `#6E8EFF` | Lifting: actions, active nav, lift data |
 | `protein` | `#E8A900` | `#FFC21A` | Protein: ring, progress |
 | `habit` | `#23824A` | `#5CCB8A` | Habits: "Avoided" state, sugar / junk-free counts |
+| `ink` (as data) | | | Calories burnt bars and body-weight line use graphite, since the three colours are taken |
 | `danger` | `#C73A3A` | `#FF7A7A` | Delete, errors (never used for a habit slip) |
 
 ---

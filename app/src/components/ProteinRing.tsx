@@ -15,7 +15,7 @@ export default function ProteinSummary() {
     <div className="ring-row">
       <svg className="ring" width="96" height="96" viewBox="0 0 100 100" role="img" aria-label={`${total} of ${goal} grams of protein today`}>
         <circle cx="50" cy="50" r="42" className="ring-track" />
-        <circle cx="50" cy="50" r="42" className="ring-fill" strokeDasharray={`${filled.toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 50 50)" />
+        {filled > 0 && <circle cx="50" cy="50" r="42" className="ring-fill" strokeDasharray={`${filled.toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 50 50)" />}
         {left <= 0 && <path d="M37 51l9 9 17-19" className="ring-check" />}
       </svg>
       <div>
