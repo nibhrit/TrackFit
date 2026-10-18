@@ -8,6 +8,7 @@ import Today from './screens/Today'
 import Protein from './screens/Protein'
 import Week from './screens/Week'
 import Toast from './components/Toast'
+import { SettingsContext } from './lib/settingsContext'
 import { clearUser, loadForUser, useStore } from './data/store'
 
 type Tab = 'today' | 'lift' | 'protein' | 'week'
@@ -18,8 +19,6 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: 'protein', label: 'Protein', icon: <><circle cx="12" cy="12" r="8" /><path d="M12 4a8 8 0 0 1 8 8" strokeWidth="3.2" /></> },
   { id: 'week', label: 'Week', icon: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4" /></> },
 ]
-
-const today = new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
 
 export default function App() {
   const session = useSession()
@@ -41,9 +40,8 @@ export default function App() {
   if (session === undefined) return <div className="app" aria-busy="true" />
   if (session === null) return <div className="app"><main><SignIn /></main></div>
 
-  const current = TABS.find((t) => t.id === tab)!
-
   return (
+    <SettingsContext.Provider value={() => setShowSettings(true)}>
     <div className="app">
       <main>
         {pending > 0 && (
@@ -60,29 +58,11 @@ export default function App() {
         ) : tab === 'week' ? (
           <Week />
         ) : (
-          <>
-            <div className="hdr">
-              <h1>{current.label}</h1>
-              <span className="hdr-right">
-                <span className="cap">{today}</span>
-                <button className="icon-btn" aria-label="Settings" onClick={() => setShowSettings(true)}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
-                    <circle cx="12" cy="8" r="3.5" /><path d="M5 20c1.2-3.6 3.8-5.5 7-5.5s5.8 1.9 7 5.5" />
-                  </svg>
-                </button>
-              </span>
-            </div>
-            {tab === 'today' ? (
-              <Today
-                onOpenExercise={(id, repeat) => { setLiftTarget({ id, repeat, key: Date.now() }); setTab('lift') }}
-                onGoToLift={() => { setLiftTarget(null); setTab('lift') }}
-              />
-            ) : (
-              <div className="card cap">
-                {current.label} arrives in a later milestone.
-              </div>
-            )}
-          </>
+          <Today
+            onOpenExercise={(id, repeat) => { setLiftTarget({ id, repeat, key: Date.now() }); setTab('lift') }}
+            onGoToLift={() => { setLiftTarget(null); setTab('lift') }}
+            onGoToProtein={() => setTab('protein')}
+          />
         )}
       </main>
       <nav className="tabs" aria-label="Main">
@@ -101,5 +81,6 @@ export default function App() {
       </nav>
       <Toast />
     </div>
+    </SettingsContext.Provider>
   )
 }

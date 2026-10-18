@@ -1,19 +1,28 @@
-import { groupsOn, lastSession, todaySession, useStore } from '../data/store'
+import { useState } from 'react'
+import { goalFor, groupsOn, habitsOn, lastSession, proteinTotal, todaySession, useStore } from '../data/store'
 import { GROUPS, type Exercise } from '../data/types'
 import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets } from '../lib/format'
-import ProteinSummary from '../components/ProteinRing'
+import Header from '../components/Header'
 import QuickAdds from '../components/QuickAdds'
 import HabitsCard from '../components/HabitsCard'
 
 type Props = {
   onOpenExercise: (id: string, repeat: boolean) => void
   onGoToLift: () => void
+  onGoToProtein: () => void
 }
 
-export default function Today({ onOpenExercise, onGoToLift }: Props) {
+const EVENING_HOUR = 18 // the End of day card appears from 6 pm
+
+export default function Today({ onOpenExercise, onGoToLift, onGoToProtein }: Props) {
   const store = useStore()
-  const groups = groupsOn(store, localDate())
+  const today = localDate()
+  const groups = groupsOn(store, today)
+  const habits = habitsOn(store, today)
+  const habitsDone = [habits.sugar, habits.junk_food].filter(Boolean).length
+  const [showHabits, setShowHabits] = useState(false)
+  const habitsVisible = showHabits || habitsDone > 0 || new Date().getHours() >= EVENING_HOUR
 
   // Exercises for today's split (or everything if no split yet) that have history, most recent first
   const recent = (e: Exercise) => lastSession(store, e.id)?.local_date ?? ''
@@ -21,35 +30,35 @@ export default function Today({ onOpenExercise, onGoToLift }: Props) {
     .filter((e) => !groups.length || groups.includes(e.muscle_group))
     .filter((e) => lastSession(store, e.id) || todaySession(store, e.id))
     .sort((a, b) => recent(b).localeCompare(recent(a)))
-  const notDone = pool.filter((e) => !todaySession(store, e.id))
-  const featured = notDone[0]
-  const rest = pool.filter((e) => e !== featured).slice(0, 5)
+  const featured = pool.find((e) => !todaySession(store, e.id))
+  const rest = pool.filter((e) => e !== featured).slice(0, 3)
 
   return (
     <>
-      <div className="card"><ProteinSummary /></div>
+      <Header title="Today" aside={new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} />
+
+      <div className="tiles">
+        <ProteinTile onOpen={onGoToProtein} />
+        <button className="tile" onClick={() => setShowHabits(true)} aria-label={`Habits: ${habitsDone} of 2 logged today`}>
+          <span className="num tile-num habit-num">{habitsDone}<span className="tile-of">/2</span></span>
+          <span className="cap">habits</span>
+        </button>
+      </div>
+
       <QuickAdds />
 
       <div className="hdr sec-row">
-        <span className="sec">
-          {groups.length ? `Last time: ${GROUPS.filter((g) => groups.includes(g)).join(', ')}` : 'Last time'}
-        </span>
-        <button className="link" onClick={onGoToLift}>{groups.length ? 'Change split' : 'Pick today’s split'}</button>
+        <span className="sec">{groups.length ? GROUPS.filter((g) => groups.includes(g)).join(', ') : 'Last time'}</span>
+        <button className="link" onClick={onGoToLift}>{groups.length ? 'Change' : 'Pick split'}</button>
       </div>
 
       {!store.loaded && !store.exercises.length ? (
-        <div className="card cap">Loading…</div>
+        <p className="cap empty">Loading…</p>
       ) : !pool.length ? (
-        <div className="card form">
-          <span className="cap">
-            {groups.length ? 'Nothing logged for this split yet.' : 'Your last weights show here once you’ve logged a session.'}
-          </span>
-          <button className="btn" onClick={onGoToLift}>Go to Lift</button>
-        </div>
+        <p className="cap empty">Your last weights show here once you’ve logged a session.</p>
       ) : (
         <>
-          {featured && <Featured exercise={featured} onOpen={onOpenExercise} />}
-          {!featured && <div className="card cap">Everything in today’s split is done. Nice work.</div>}
+          {featured ? <Featured exercise={featured} onOpen={onOpenExercise} /> : <p className="cap empty">Today’s split is done. Nice work.</p>}
           {rest.length > 0 && (
             <div className="list">
               {rest.map((e) => {
@@ -70,8 +79,29 @@ export default function Today({ onOpenExercise, onGoToLift }: Props) {
         </>
       )}
 
-      <HabitsCard />
+      {habitsVisible && <HabitsCard />}
     </>
+  )
+}
+
+function ProteinTile({ onOpen }: { onOpen: () => void }) {
+  const store = useStore()
+  const today = localDate()
+  const total = proteinTotal(store, today)
+  const goal = goalFor(store, today)
+  const C = 2 * Math.PI * 40
+  const filled = Math.min(total / goal, 1) * C
+  return (
+    <button className="tile tile-ring" onClick={onOpen} aria-label={`Protein: ${total} of ${goal} grams`}>
+      <svg width="40" height="40" viewBox="0 0 100 100" aria-hidden="true">
+        <circle cx="50" cy="50" r="40" className="ring-track" style={{ strokeWidth: 14 }} />
+        <circle cx="50" cy="50" r="40" className="ring-fill" style={{ strokeWidth: 14 }} strokeDasharray={`${filled.toFixed(1)} ${C.toFixed(1)}`} transform="rotate(-90 50 50)" />
+      </svg>
+      <span>
+        <span className="num tile-num">{total}<span className="tile-of"> g</span></span>
+        <span className="cap">{total >= goal ? 'goal hit' : `of ${goal} g`}</span>
+      </span>
+    </button>
   )
 }
 

@@ -225,3 +225,31 @@ select, .field {
 .weight-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
 .weight-row input { height: 50px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 12px; min-width: 0; }
 .weight-row .seg button { min-height: 50px; min-width: 44px; }
+
+/* Declutter (TF-32): tiles, compact rows, week grid */
+main { gap: 12px; }
+.empty { margin: 0; padding: 4px 2px; }
+.tiles { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
+.tiles.four { grid-template-columns: 1fr 1fr; }
+.tile { background: var(--card); border-radius: 16px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 2px; text-align: left; min-height: 64px; }
+.tile-ring { flex-direction: row; align-items: center; gap: 10px; }
+.tile-ring > span { display: flex; flex-direction: column; }
+.tile-num { font-size: 24px; line-height: 1.1; }
+.tile-of { font-size: 13px; font-weight: 500; font-stretch: 100%; color: var(--steel); }
+.tone-lift { color: var(--lift); }
+.tone-protein { color: var(--protein-text); }
+.tone-habit { color: var(--habit); }
+.entry-row { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto; gap: 8px; }
+.entry-row:has(> :nth-child(2):last-child) { grid-template-columns: minmax(0, 1fr) auto; }
+.entry-row input { height: 50px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 12px; min-width: 0; }
+.icon-btn.add { font-size: 26px; font-weight: 400; color: var(--lift); }
+.grid-week { display: grid; grid-template-columns: 56px repeat(7, 1fr); gap: 8px 4px; align-items: center; justify-items: center; }
+.gw-label { justify-self: start; }
+.gw-day.today { color: var(--lift); font-weight: 700; }
+.mini { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line); }
+.mini.on { background: var(--lift); border-color: var(--lift); }
+.mini.ok { background: var(--habit); border-color: var(--habit); }
+.mini.had { border: 2px solid var(--ink); }
+.mini.none { border-style: dashed; border-color: var(--steel); }
+.mini.future { border-color: transparent; background: var(--line); opacity: 0.4; transform: scale(0.5); }
+.legend { margin: -4px 2px 0; }

@@ -26,7 +26,7 @@ export default function QuickAdds({ offerStarters = false }: { offerStarters?: b
   }
 
   return (
-    <div className="chips" role="group" aria-label="Quick add protein">
+    <div className="chips scroll" role="group" aria-label="Quick add protein">
       {quickAdds.map((q) => (
         <button key={q.id} className="chip food" onClick={() => logProtein(q.grams, q.name, q.id)}>
           + {q.name} <b>{q.grams} g</b>

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import {
-  deleteWeight, goalFor, habitsOn, logWeight, loggedOn, proteinTotal, setWeightUnit, streak, useStore,
+  deleteWeight, goalFor, habitsOn, logWeight, loggedOn, proteinTotal, streak, useStore,
 } from '../data/store'
+import Header from '../components/Header'
 import type { BodyWeight, HabitKey, Unit } from '../data/types'
 import { addDays, fmtDate, fmtDay, localDate, weekDays, weekStart } from '../lib/dates'
 import { fmtWeight } from '../lib/format'
@@ -12,53 +13,66 @@ export default function Week() {
   const today = localDate()
   const days = weekDays(weekStart(today))
   const sofar = days.filter((d) => d <= today)
-  const logged = sofar.filter((d) => loggedOn(store, d)).length
+  const count = (fn: (d: string) => boolean) => sofar.filter(fn).length
+  const proteinHits = count((d) => proteinTotal(store, d) >= goalFor(store, d))
   const run = streak(store)
 
   return (
     <>
-      <div className="hdr">
-        <h1>Week</h1>
-        <span className="cap">{fmtDate(days[0])} to {fmtDate(days[6])}</span>
+      <Header title="Week" aside={`${fmtDate(days[0])} to ${fmtDate(days[6])}`} />
+
+      <div className="tiles four">
+        <Tile n={count((d) => loggedOn(store, d))} label={run > 1 ? `days logged · ${run}-day streak` : 'days logged'} tone="lift" />
+        <Tile n={proteinHits} label="protein goal hit" tone="protein" />
+        <Tile n={count((d) => habitsOn(store, d).sugar === 'avoided')} label="no sugar" tone="habit" />
+        <Tile n={count((d) => habitsOn(store, d).junk_food === 'avoided')} label="no junk food" tone="habit" />
       </div>
 
-      <div className="card form">
-        <div><span className="num big">{logged}</span> <span className="cap">of 7 days logged this week</span></div>
-        <DayStrip days={days} today={today} state={(d) => (d > today ? 'future' : loggedOn(store, d) ? 'on' : 'off')} />
-        <span className="cap">{run ? `${run}-day logging streak` : 'Log anything today to start a streak.'}</span>
-      </div>
+      <HabitGrid days={days} today={today} />
+      <p className="cap legend">Filled: avoided · Ring: had it · Dashed: not logged</p>
 
       <ProteinCard />
-
-      {([['sugar', 'sugar'], ['junk_food', 'junk food']] as [HabitKey, string][]).map(([key, label]) => {
-        const ok = sofar.filter((d) => habitsOn(store, d)[key] === 'avoided').length
-        return (
-          <div key={key} className="card form">
-            <div><span className="num big habit-num">{ok}</span> <span className="cap">of {sofar.length} days without {label}</span></div>
-            <DayStrip days={days} today={today} state={(d) => {
-              if (d > today) return 'future'
-              const v = habitsOn(store, d)[key]
-              return v === 'avoided' ? 'ok' : v === 'had' ? 'had' : 'none'
-            }} />
-          </div>
-        )
-      })}
-      <p className="cap" style={{ margin: '-6px 2px 0' }}>Green: avoided. Solid ring: had it. Dashed: not logged.</p>
-
       <BodyWeightCard />
     </>
   )
 }
 
+function Tile({ n, label, tone }: { n: number; label: string; tone: 'lift' | 'protein' | 'habit' }) {
+  return (
+    <div className="tile">
+      <span className={`num tile-num tone-${tone}`}>{n}<span className="tile-of">/7</span></span>
+      <span className="cap">{label}</span>
+    </div>
+  )
+}
+
 type DotState = 'on' | 'off' | 'ok' | 'had' | 'none' | 'future'
 
-function DayStrip({ days, today, state }: { days: string[]; today: string; state: (d: string) => DotState }) {
+// One grid instead of three cards: a row each for Logged, Sugar and Junk food
+function HabitGrid({ days, today }: { days: string[]; today: string }) {
+  const store = useStore()
+  const habitState = (d: string, key: HabitKey): DotState => {
+    if (d > today) return 'future'
+    const v = habitsOn(store, d)[key]
+    return v === 'avoided' ? 'ok' : v === 'had' ? 'had' : 'none'
+  }
+  const rows: [string, (d: string) => DotState][] = [
+    ['Logged', (d) => (d > today ? 'future' : loggedOn(store, d) ? 'on' : 'off')],
+    ['Sugar', (d) => habitState(d, 'sugar')],
+    ['Junk', (d) => habitState(d, 'junk_food')],
+  ]
   return (
-    <div className="strip">
+    <div className="card grid-week" role="table" aria-label="This week by day">
+      <span role="columnheader" />
       {days.map((d) => (
-        <div key={d} className="day">
-          {fmtDay(d).slice(0, 1)}
-          <span className={`dot ${state(d)}${d === today ? ' today' : ''}`} title={fmtDate(d)}>{Number(d.slice(8))}</span>
+        <span key={d} role="columnheader" className={`cap gw-day${d === today ? ' today' : ''}`}>{fmtDay(d).slice(0, 1)}</span>
+      ))}
+      {rows.map(([label, state]) => (
+        <div key={label} role="row" style={{ display: 'contents' }}>
+          <span role="rowheader" className="cap gw-label">{label}</span>
+          {days.map((d) => (
+            <span key={d} role="cell" className={`mini ${state(d)}`} title={`${label}, ${fmtDate(d)}`} />
+          ))}
         </div>
       ))}
     </div>
@@ -80,13 +94,13 @@ function ProteinCard() {
   return (
     <div className="card form">
       <div className="card-top">
-        <div><span className="num big protein-num">{hits}</span> <span className="cap">of {range} days hit the protein goal</span></div>
+        <b>Protein per day</b>
         <div className="seg small" role="group" aria-label="Range">
           <button className="pick" aria-pressed={range === 7} onClick={() => { setRange(7); setActive(null) }}>7 days</button>
           <button className="pick" aria-pressed={range === 30} onClick={() => { setRange(30); setActive(null) }}>30 days</button>
         </div>
       </div>
-      <span className="cap"><span className="trend-read">{fmtDate(shown.d)}: <b>{shown.total} g</b></span> of {shown.goal} g</span>
+      <span className="cap"><span className="trend-read">{fmtDate(shown.d)}: <b>{shown.total} g</b></span> of {shown.goal} g · goal hit {hits} of {range} days</span>
       <div className={`bars${range === 30 ? ' dense' : ''}`} role="img" aria-label={`Protein per day, last ${range} days. Goal hit on ${hits} days.`}>
         {rows.map((r) => (
           <button
@@ -145,17 +159,13 @@ function BodyWeightCard() {
             {change !== null && <span className="cap">{change > 0 ? '+' : change < 0 ? '−' : ''}{fmtWeight(Math.abs(Math.round(change * 10) / 10))} {unit} in 30 days</span>}
           </div>
         ) : (
-          <span className="cap">Log your weight to start the chart. Once a day is enough, ideally at the same time.</span>
+          <span className="cap">Log your weight to start the chart. Unit is in Settings.</span>
         )}
 
-        <form className="weight-row" onSubmit={submit} noValidate>
+        <form className="entry-row" onSubmit={submit} noValidate>
           <input id="body-weight" className="num" inputMode="decimal" aria-label={`Body weight in ${unit}`}
             placeholder={unit === 'kg' ? '78.4' : '172.8'}
             value={value} onChange={(e) => { setValue(e.target.value); setError(null) }} />
-          <div className="seg small" role="group" aria-label="Unit">
-            <button type="button" className="pick" aria-pressed={unit === 'kg'} onClick={() => setWeightUnit('kg')}>kg</button>
-            <button type="button" className="pick" aria-pressed={unit === 'lb'} onClick={() => setWeightUnit('lb')}>lb</button>
-          </div>
           <button className="btn" type="submit">{todays ? 'Update' : 'Log'}</button>
         </form>
         {error && <p className="err" role="alert">{error}</p>}
