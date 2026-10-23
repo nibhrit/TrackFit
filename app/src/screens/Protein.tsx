@@ -1,9 +1,9 @@
 import { useContext, useState } from 'react'
 import {
-  deleteProtein, foodsWithoutKcal, goalFor, kcalEatenOn, kcalGoalFor, logFood, logProtein, proteinOn, updateEntry, useStore,
+  deleteProtein, foodsWithoutKcal, goalFor, kcalEatenOn, kcalGoalFor, logFood, proteinOn, updateEntry, useStore,
 } from '../data/store'
 import Header from '../components/Header'
-import { NO_FOOD, NO_NUTRIENTS, type ProteinEntry } from '../data/types'
+import { NO_FOOD, type Nutrients, type ProteinEntry } from '../data/types'
 import { localDate } from '../lib/dates'
 import { portionText } from '../lib/nutrition'
 import { isAiFood } from '../lib/aiEstimate'
@@ -16,7 +16,6 @@ import MacrosPanel from '../components/MacrosPanel'
 
 // The Food tab (was "Protein"): protein ring + calories, one-tap saved foods, search the food list, today's entries.
 
-const toInt = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN)
 const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 
 export default function Protein() {
@@ -83,53 +82,92 @@ function AddFood() {
     <FoodFinder
       submitLabel="Log" saveQuick
       onDone={(n, ref, name) => logFood({ ...n, ...ref, label: name })}
-      footer={<button className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setManual(true)}>Or type protein and kcal</button>}
+      footer={<button className="link" style={{ alignSelf: 'flex-start' }} onClick={() => setManual(true)}>Or type the numbers (from a label)</button>}
     />
   )
 }
 
-// Something not in the list: type protein (and calories if known)
+// Something not in the list (e.g. from a pack label): type what you know. Protein or kcal required, the rest optional.
 function ManualForm({ initialLabel, onSearch }: { initialLabel: string; onSearch: () => void }) {
   const [label, setLabel] = useState(initialLabel.trim())
-  const [grams, setGrams] = useState('')
-  const [kcal, setKcal] = useState('')
+  const [vals, setVals] = useState<Vals>(toVals())
   const [error, setError] = useState<string | null>(null)
   const [confirmBig, setConfirmBig] = useState(false)
 
   function submit(e: React.FormEvent, force = false) {
     e.preventDefault()
-    const g = grams.trim() ? toInt(grams) : 0
-    const k = kcal.trim() ? toInt(kcal) : null
-    if (!Number.isInteger(g) || g < 0) return setError('Enter protein as a whole number of grams.')
-    if (k !== null && (!Number.isInteger(k) || k > 5000)) return setError('Enter kcal as a whole number up to 5000, or leave it empty.')
-    if (g === 0 && !k) return setError('Enter protein grams or kcal.')
-    if (g > 1000) return setError('One entry can be at most 1000 g of protein.')
-    if (g > 300 && !force) return setConfirmBig(true)
-    if (k === null) logProtein(g, label || null)
-    else logFood({ grams: g, ...NO_NUTRIENTS, kcal: k, ...NO_FOOD, label: label || null })
-    setLabel(''); setGrams(''); setKcal(''); setError(null); setConfirmBig(false)
+    const r = readVals(vals)
+    if ('error' in r) return setError(r.error)
+    if (r.n.grams > 300 && !force) return setConfirmBig(true)
+    logFood({ ...r.n, ...NO_FOOD, label: label || null })
+    setLabel(''); setVals(toVals()); setError(null); setConfirmBig(false)
   }
 
   return (
     <form className="card form" onSubmit={submit} noValidate>
       <input className="full" aria-label="What you ate (optional)" placeholder="What you ate (optional)" value={label} onChange={(e) => setLabel(e.target.value)} />
-      <div className="nums-row">
-        <input id="grams" className="num" inputMode="numeric" placeholder="Protein g" aria-label="Grams of protein"
-          value={grams} onChange={(e) => { setGrams(e.target.value); setError(null); setConfirmBig(false) }} />
-        <input className="num" inputMode="numeric" placeholder="kcal" aria-label="Calories (optional)"
-          value={kcal} onChange={(e) => { setKcal(e.target.value); setError(null) }} />
-        <button className="btn" type="submit">Log</button>
-      </div>
+      <NutrientFields vals={vals} onChange={(v) => { setVals(v); setError(null); setConfirmBig(false) }} />
+      <p className="cap note">Leave a box empty if you don’t know it. Pack labels list these per serving.</p>
       {error && <p className="err" role="alert">{error}</p>}
       {confirmBig && (
         <div className="confirm">
-          <span>More than 300 g in one entry. Log it anyway?</span>
-          <button type="button" className="btn ghost" onClick={(e) => submit(e as unknown as React.FormEvent, true)}>Log {grams} g</button>
+          <span>More than 300 g of protein in one entry. Log it anyway?</span>
+          <button type="button" className="btn ghost" onClick={(e) => submit(e as unknown as React.FormEvent, true)}>Log it</button>
         </div>
       )}
-      <button type="button" className="link" style={{ alignSelf: 'flex-start' }} onClick={onSearch}>Search the food list instead</button>
+      <div className="two">
+        <button type="button" className="btn ghost" onClick={onSearch}>Search instead</button>
+        <button className="btn" type="submit">Log</button>
+      </div>
     </form>
   )
+}
+
+// ---------- Nutrient fields (typed entries and edits) ----------
+
+// Protein and kcal first; the rest optional. Empty = unknown (stays out of totals, flagged in Macros).
+const FIELDS: [keyof Nutrients, string, number][] = [
+  ['grams', 'Protein g', 1000], ['kcal', 'kcal', 5000], ['carbs_g', 'Carbs g', 1000],
+  ['fat_g', 'Fat g', 1000], ['fiber_g', 'Fibre g', 300], ['added_sugar_g', 'Sugar g', 1000],
+]
+type Vals = Record<keyof Nutrients, string>
+const toVals = (n?: Partial<Nutrients>): Vals =>
+  Object.fromEntries(FIELDS.map(([k]) => [k, n?.[k] == null ? '' : String(n[k])])) as Vals
+
+// Parse the boxes: whole numbers (the database stores whole grams), empty optional fields become null
+function readVals(v: Vals): { n: Nutrients } | { error: string } {
+  const out: Record<string, number | null> = {}
+  for (const [k, label, max] of FIELDS) {
+    const raw = v[k].trim().replace(',', '.')
+    if (!raw) { out[k] = k === 'grams' ? 0 : null; continue }
+    const x = Math.round(Number(raw))
+    if (!Number.isFinite(Number(raw)) || x < 0 || x > max) return { error: `Check ${label.toLowerCase()} (0 to ${max}).` }
+    out[k] = x
+  }
+  if (out.grams === 0 && !out.kcal) return { error: 'Enter protein grams or kcal.' }
+  return { n: out as Nutrients }
+}
+
+function NutrientFields({ vals, onChange }: { vals: Vals; onChange: (v: Vals) => void }) {
+  return (
+    <div className="ai-grid">
+      {FIELDS.map(([k, label]) => (
+        <label key={k} className={k === 'grams' ? 'tone-protein' : undefined}>
+          <span className="cap">{label}</span>
+          <input className="num" inputMode="decimal" aria-label={label} placeholder="–" value={vals[k]} onChange={(e) => onChange({ ...vals, [k]: e.target.value })} />
+        </label>
+      ))}
+    </div>
+  )
+}
+
+// One line of macros under an entry, e.g. "C 82 · F 28 · fibre 8 · sugar 0 g"
+function macroLine(e: ProteinEntry) {
+  const parts = [
+    e.carbs_g != null && `C ${e.carbs_g}`, e.fat_g != null && `F ${e.fat_g}`,
+    e.fiber_g != null && `fibre ${e.fiber_g}`, e.added_sugar_g != null && `sugar ${e.added_sugar_g}`,
+  ].filter(Boolean)
+  return parts.length ? `${parts.join(' · ')} g` : null
 }
 
 // ---------- Today's entries ----------
@@ -148,6 +186,7 @@ function EntryRow({ entry }: { entry: ProteinEntry }) {
         <span className="row-main">
           <span>{entry.label ?? 'Protein'}</span>
           <span className="cap">{ai ? 'AI estimate · ' : ''}{portion ? `${portion} · ` : ''}{timeOf(entry.logged_at)}</span>
+          {macroLine(entry) && <span className="cap">{macroLine(entry)}</span>}
         </span>
         <span className="row-nums">
           <span className="num">{about && <span className="cap">{about}</span>}{entry.grams} g</span>
@@ -177,21 +216,16 @@ function EntryRow({ entry }: { entry: ProteinEntry }) {
 // or link the entry to a food from the list so it gets calories and macros
 function TypedEdit({ entry, onClose }: { entry: ProteinEntry; onClose: () => void }) {
   const [linking, setLinking] = useState(false)
-  const [grams, setGrams] = useState(String(entry.grams))
-  const [kcal, setKcal] = useState(entry.kcal == null ? '' : String(entry.kcal))
+  const [vals, setVals] = useState<Vals>(toVals(entry))
   const [label, setLabel] = useState(entry.label ?? '')
   const [error, setError] = useState<string | null>(null)
 
+  // Every number is editable, so editing one no longer throws the others away
   function save(e: React.FormEvent) {
     e.preventDefault()
-    const g = toInt(grams)
-    const k = kcal.trim() ? toInt(kcal) : null
-    if (!Number.isInteger(g) || g < 0 || g > 1000) return setError('Enter protein between 0 and 1000 g.')
-    if (k !== null && (!Number.isInteger(k) || k > 5000)) return setError('Enter kcal up to 5000, or leave it empty.')
-    if (g === 0 && !k) return setError('Enter protein grams or kcal.')
-    // Changed numbers no longer match the food's other nutrients
-    const changed = g !== entry.grams || k !== entry.kcal
-    updateEntry(entry.id, { grams: g, kcal: k, label: label || null, ...(changed ? { ...NO_NUTRIENTS, kcal: k } : {}) })
+    const r = readVals(vals)
+    if ('error' in r) return setError(r.error)
+    updateEntry(entry.id, { ...r.n, label: label || null })
     onClose()
   }
 
@@ -209,10 +243,7 @@ function TypedEdit({ entry, onClose }: { entry: ProteinEntry; onClose: () => voi
   return (
     <form className="card form" onSubmit={save} noValidate>
       <input className="full" aria-label="Label" placeholder="Protein" value={label} onChange={(e) => setLabel(e.target.value)} />
-      <div className="two">
-        <input className="num" inputMode="numeric" aria-label="Grams of protein" value={grams} onChange={(e) => { setGrams(e.target.value); setError(null) }} />
-        <input className="num" inputMode="numeric" aria-label="Calories (optional)" placeholder="kcal" value={kcal} onChange={(e) => { setKcal(e.target.value); setError(null) }} />
-      </div>
+      <NutrientFields vals={vals} onChange={(v) => { setVals(v); setError(null) }} />
       {error && <p className="err" role="alert">{error}</p>}
       <div className="three">
         <button type="button" className="link danger" onClick={() => deleteProtein(entry.id)}>Delete</button>
