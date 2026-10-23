@@ -13,7 +13,7 @@ const data = JSON.parse(readFileSync(file, 'utf8'))
 const CATEGORIES = ['indian_home', 'basic', 'restaurant']
 const CONFIDENCE = ['measured', 'calculated', 'estimate']
 const FOOD_KEYS = ['id', 'name', 'aliases', 'category', 'per100g', 'portions', 'source', 'confidence', 'notes']
-const PER100_KEYS = ['kcal', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g']
+const PER100_KEYS = ['kcal', 'protein_g', 'carbs_g', 'fat_g', 'fiber_g', 'added_sugar_g']
 const ENERGY_TOLERANCE = 0.15 // ±15%
 const ENERGY_ABS_SLACK = 8 // kcal; avoids false alarms on near-zero foods (tea, water-heavy drinks)
 
@@ -74,6 +74,11 @@ for (const [i, f] of (data.foods ?? []).entries()) {
     else if (n[k] < 0) err(id, `per100g.${k} is negative`)
   }
   if (n.fiber_g !== undefined && (!isNum(n.fiber_g) || n.fiber_g < 0)) err(id, 'per100g.fiber_g must be a non-negative number')
+  if (n.fiber_g === undefined) warnings.push(`${id}: fiber_g missing`)
+  // added_sugar_g = free/added sugars only (not lactose or fruit sugar); must be filled for every food
+  if (n.added_sugar_g === undefined) err(id, 'per100g.added_sugar_g missing (use 0 when none)')
+  else if (!isNum(n.added_sugar_g) || n.added_sugar_g < 0) err(id, 'per100g.added_sugar_g must be a non-negative number')
+  else if (n.added_sugar_g > n.carbs_g + 0.05) err(id, `added_sugar_g ${n.added_sugar_g} exceeds carbs_g ${n.carbs_g}`)
   if ([n.protein_g, n.carbs_g, n.fat_g].some((x) => x > 100)) err(id, 'a macro exceeds 100 g per 100 g')
   const macroSum = (n.protein_g ?? 0) + (n.carbs_g ?? 0) + (n.fat_g ?? 0)
   if (macroSum > 102) err(id, `protein+carbs+fat = ${macroSum.toFixed(1)} g > 100 g`)

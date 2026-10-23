@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { bodyKg, clearUser, goalFor, kcalGoalFor, setWeightUnit, useStore } from '../data/store'
+import { bodyKg, clearUser, fitnessGoal, goalFor, kcalGoalFor, setWeightUnit, useStore } from '../data/store'
 import { localDate } from '../lib/dates'
-import { CalorieGoalSetting, GoalSetting, SavedFoods } from '../components/ProteinSettings'
+import { CalorieGoalSetting, FitnessGoalSetting, GoalSetting, SavedFoods } from '../components/ProteinSettings'
+import { PROTEIN_PER_KG, suggestedKcal } from '../lib/macros'
 
 const FOOD_DATA_URL = 'https://github.com/nibhrit/TrackFit/blob/main/product/FOOD_DATA.md'
 
@@ -21,8 +22,7 @@ export default function Settings({ session, onClose }: Props) {
   }, [])
 
   const unit = store.settings.body_weight_unit
-  // Rough maintenance suggestion: about 30 kcal per kg, rounded to 50
-  const suggestedKcal = Math.round((bodyKg(store).kg * 30) / 50) * 50
+  const goal = fitnessGoal(store)
 
   return (
     <>
@@ -30,8 +30,9 @@ export default function Settings({ session, onClose }: Props) {
       <div className="hdr"><h1>Settings</h1></div>
 
       <h2 className="sec">Food</h2>
-      <GoalSetting current={goalFor(store, localDate())} />
-      <CalorieGoalSetting current={kcalGoalFor(store, localDate())} suggested={suggestedKcal} />
+      <FitnessGoalSetting current={goal} />
+      <GoalSetting current={goalFor(store, localDate())} suggested={Math.round(PROTEIN_PER_KG[goal] * bodyKg(store).kg)} />
+      <CalorieGoalSetting current={kcalGoalFor(store, localDate())} suggested={suggestedKcal(goal, bodyKg(store).kg)} goal={goal} />
       <SavedFoods quickAdds={store.quickAdds} />
       <p className="cap empty">
         Nutrition data: USDA FoodData Central (public domain). Dishes are TrackFit recipes from those ingredients; restaurant dishes are estimates. Approximate, not medical advice.{' '}

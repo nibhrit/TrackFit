@@ -10,6 +10,7 @@ export type Per100g = {
   carbs_g: number     // total carbohydrate INCLUDING fibre (USDA convention); never add fibre on top
   fat_g: number
   fiber_g?: number
+  added_sugar_g?: number  // free/added sugars (sugar, jaggery, honey, syrups, sweets); 0 for foods with none. Not total sugars.
 }
 
 // A household measure, e.g. "1 katori" = 150 g of cooked dal. Exactly one portion per food has default: true.

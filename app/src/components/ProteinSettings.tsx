@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { addQuickAdd, deleteQuickAdd, moveQuickAdd, setGoal, setKcalGoal, updateQuickAdd } from '../data/store'
-import type { QuickAdd } from '../data/types'
+import { addQuickAdd, deleteQuickAdd, linkQuickAdd, moveQuickAdd, setFitnessGoal, setGoal, setKcalGoal, updateQuickAdd } from '../data/store'
+import { FITNESS_GOALS, NO_NUTRIENTS, type FitnessGoal, type QuickAdd } from '../data/types'
 import { portionText } from '../lib/nutrition'
+import { isAiFood } from '../lib/aiEstimate'
+import FoodFinder from './FoodFinder'
 
 const toInt = (v: string) => (/^\d+$/.test(v.trim()) ? Number(v.trim()) : NaN)
 // Empty = calories not known
 const toKcal = (v: string) => (v.trim() ? toInt(v) : null)
 
-// Rarely changed food setup, shown in Settings: saved foods, the protein goal and the calorie target
+// Rarely changed food setup, shown in Settings: goal, saved foods, the protein goal and the calorie target
 
 export function SavedFoods({ quickAdds }: { quickAdds: QuickAdd[] }) {
   const [name, setName] = useState('')
@@ -15,16 +17,21 @@ export function SavedFoods({ quickAdds }: { quickAdds: QuickAdd[] }) {
   const [kcal, setKcal] = useState('')
   const [error, setError] = useState<string | null>(null)
 
-  async function add(e: React.FormEvent) {
+  // Opens by itself while some saved food has no calories (the Food tab's "Fix" lands here)
+  const missing = quickAdds.filter((q) => q.kcal == null).length
+  const [open] = useState(missing > 0)
+
+  function add(e: React.FormEvent) {
     e.preventDefault()
-    const err = await addQuickAdd(name, { grams: grams.trim() ? toInt(grams) : 0, kcal: toKcal(kcal), carbs_g: null, fat_g: null })
+    const err = addQuickAdd(name, { ...NO_NUTRIENTS, grams: grams.trim() ? toInt(grams) : 0, kcal: toKcal(kcal) })
     setError(err)
     if (!err) { setName(''); setGrams(''); setKcal('') }
   }
 
   return (
-    <details className="card edit-ex">
-      <summary>Saved foods</summary>
+    <details className="card edit-ex" open={open}>
+      <summary>Saved foods{missing > 0 ? ` · ${missing} without calories` : ''}</summary>
+      {missing > 0 && <p className="cap note">Link each one to a food from the list to add calories, carbs, fat, fibre and sugar.</p>}
       {quickAdds.map((q, i) => <FoodRow key={q.id} food={q} first={i === 0} last={i === quickAdds.length - 1} />)}
       <form className="form" onSubmit={add} noValidate>
         <label htmlFor="new-food">Add a food</label>
@@ -41,8 +48,15 @@ export function SavedFoods({ quickAdds }: { quickAdds: QuickAdd[] }) {
   )
 }
 
+// "Dal, 1 bowl" → "Dal", "Greek yogurt cup" → "Greek yogurt": amounts and measures are picked as the portion instead
+const searchTerms = (name: string) =>
+  name.replace(/\d+(\.\d+)?\s*(g|gm|grams?|ml)?\b/gi, ' ')
+    .replace(/\b(bowl|cup|scoop|piece|pieces|katori|plate|glass|tbsp|tsp|serving|handful)s?\b/gi, ' ')
+    .replace(/[,]+/g, ' ').replace(/\s+/g, ' ').trim() || name
+
 function FoodRow({ food, first, last }: { food: QuickAdd; first: boolean; last: boolean }) {
   const [editing, setEditing] = useState(false)
+  const [linking, setLinking] = useState(false)
   const [name, setName] = useState(food.name)
   const [grams, setGrams] = useState(String(food.grams))
   const [kcal, setKcal] = useState(food.kcal == null ? '' : String(food.kcal))
@@ -51,9 +65,9 @@ function FoodRow({ food, first, last }: { food: QuickAdd; first: boolean; last: 
 
   if (editing) {
     return (
-      <form className="form" onSubmit={async (e) => {
+      <form className="form" onSubmit={(e) => {
         e.preventDefault()
-        const err = await updateQuickAdd(food.id, name, toInt(grams), toKcal(kcal))
+        const err = updateQuickAdd(food.id, name, toInt(grams), toKcal(kcal))
         setError(err)
         if (!err) setEditing(false)
       }} noValidate>
@@ -62,7 +76,11 @@ function FoodRow({ food, first, last }: { food: QuickAdd; first: boolean; last: 
           <input className="num" inputMode="numeric" aria-label="Grams of protein" value={grams} onChange={(e) => { setGrams(e.target.value); setError(null) }} />
           <input className="num" inputMode="numeric" aria-label="Calories (optional)" placeholder="kcal" value={kcal} onChange={(e) => { setKcal(e.target.value); setError(null) }} />
         </div>
-        {food.food_id && <p className="cap" style={{ margin: 0 }}>From the food list{portion ? `, ${portion}` : ''}. Changing the numbers makes it a typed food.</p>}
+        {food.food_id && (
+          <p className="cap" style={{ margin: 0 }}>
+            {isAiFood(food.food_id) ? 'From an AI estimate' : 'From the food list'}{portion ? `, ${portion}` : ''}. Changing the numbers makes it a typed food.
+          </p>
+        )}
         {error && <p className="err" role="alert">{error}</p>}
         <div className="three">
           <button type="button" className="link danger" onClick={() => deleteQuickAdd(food.id)}>Delete</button>
@@ -73,18 +91,53 @@ function FoodRow({ food, first, last }: { food: QuickAdd; first: boolean; last: 
     )
   }
 
+  // Link to a food: its protein is recomputed from the food list, so show the old value next to the new one
+  if (linking) {
+    return (
+      <div className="link-food">
+        <FoodFinder
+          initialQuery={searchTerms(food.name)} submitLabel="Link"
+          note={`“${food.name}” is now ${food.grams} g protein, no calories. Linking replaces it with the food’s values (protein may change).`}
+          onDone={(n, ref) => { linkQuickAdd(food.id, n, ref); setLinking(false) }}
+          onCancel={() => setLinking(false)}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="food-row">
       <button className="food-name" onClick={() => setEditing(true)}>
-        <span>{food.name}</span> <span className="cap">{food.grams} g{food.kcal != null ? ` · ${food.kcal} kcal` : ''}</span>
+        <span>{food.name}</span> <span className="cap">{food.grams} g{food.kcal != null ? ` · ${food.kcal} kcal` : ' · no kcal'}</span>
       </button>
       <button className="icon-btn" aria-label={`Move ${food.name} up`} disabled={first} onClick={() => moveQuickAdd(food.id, -1)}>↑</button>
       <button className="icon-btn" aria-label={`Move ${food.name} down`} disabled={last} onClick={() => moveQuickAdd(food.id, 1)}>↓</button>
+      {food.kcal == null && <button className="link small link-btn" onClick={() => setLinking(true)}>Link to a food</button>}
     </div>
   )
 }
 
-export function GoalSetting({ current }: { current: number }) {
+// Lose fat / maintain / build muscle: sets the macro targets (protein per kg, fat share) and the calorie suggestion
+export function FitnessGoalSetting({ current }: { current: FitnessGoal }) {
+  return (
+    <div className="card form">
+      <span className="label">Goal</span>
+      <div className="seg small" role="group" aria-label="Fitness goal">
+        {FITNESS_GOALS.map(([id, name]) => (
+          <button key={id} className="pick" aria-pressed={current === id} onClick={() => setFitnessGoal(id)}>{name}</button>
+        ))}
+      </div>
+      <p className="cap" style={{ margin: 0 }}>
+        {current === 'lose_fat' ? 'High protein (2 g per kg) to keep muscle while eating less.'
+          : current === 'build_muscle' ? 'Protein 1.8 g per kg with a small calorie surplus.'
+          : 'Protein 1.6 g per kg at maintenance calories.'} Used for the targets under Macros on the Food tab.
+      </p>
+    </div>
+  )
+}
+
+// suggested: the goal-based protein target the Macros panel uses (g/kg × body weight), offered when it differs
+export function GoalSetting({ current, suggested }: { current: number; suggested: number }) {
   const [value, setValue] = useState(String(current))
   const [base, setBase] = useState(current)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -112,15 +165,24 @@ export function GoalSetting({ current }: { current: number }) {
           <button className="btn" type="submit">Save</button>
         </div>
         {msg && <p className={msg.ok ? 'cap' : 'err'} role={msg.ok ? 'status' : 'alert'} style={{ margin: 0 }}>{msg.text}</p>}
-        <p className="cap" style={{ margin: 0 }}>Applies from today. Earlier days keep the goal they had.</p>
+        <p className="cap" style={{ margin: 0 }}>
+          Applies from today. Earlier days keep the goal they had.
+          {Math.abs(suggested - current) >= 5 && <> Your goal and weight suggest about {suggested} g. <button type="button" className="link small" onClick={() => { setValue(String(suggested)); setMsg(null) }}>Use {suggested} g</button></>}
+        </p>
       </form>
     </div>
   )
 }
 
 // Calorie target. No default is applied: until one is saved the app shows calories eaten without a target.
-// The suggestion is a rough maintenance figure (about 30 kcal per kg of body weight), labelled as such.
-export function CalorieGoalSetting({ current, suggested }: { current: number | null; suggested: number }) {
+// The suggestion is a rough figure for the goal (kcal per kg of body weight, see lib/macros.ts), labelled as such.
+const GOAL_NOTE: Record<FitnessGoal, string> = {
+  lose_fat: 'losing fat slowly (about 24 kcal per kg of body weight, roughly 20% under maintenance)',
+  maintain: 'keeping your weight steady (about 30 kcal per kg of body weight)',
+  build_muscle: 'building muscle (about 33 kcal per kg of body weight, roughly 10% over maintenance)',
+}
+
+export function CalorieGoalSetting({ current, suggested, goal }: { current: number | null; suggested: number; goal: FitnessGoal }) {
   const [value, setValue] = useState(String(current ?? suggested))
   const [base, setBase] = useState(current)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -148,7 +210,7 @@ export function CalorieGoalSetting({ current, suggested }: { current: number | n
         </div>
         {msg && <p className={msg.ok ? 'cap' : 'err'} role={msg.ok ? 'status' : 'alert'} style={{ margin: 0 }}>{msg.text}</p>}
         <p className="cap" style={{ margin: 0 }}>
-          {current == null && `Not set yet. ${suggested} kcal is a rough starting point for keeping your weight steady (about 30 kcal per kg of body weight). `}
+          {current == null ? 'Not set yet. ' : ''}{suggested} kcal is a rough starting point for {GOAL_NOTE[goal]}.{' '}
           Needs vary with age, height and activity: treat it as a guide and adjust after a few weeks of weigh-ins. Applies from today.
         </p>
       </form>

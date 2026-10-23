@@ -16,6 +16,9 @@ export function nutrientsFor(food: Food, grams: number): Nutrients {
     kcal: Math.round(p.kcal * f),
     carbs_g: Math.round(p.carbs_g * f),
     fat_g: Math.round(p.fat_g * f),
+    // Optional in the dataset: unknown stays unknown rather than 0
+    fiber_g: p.fiber_g == null ? null : Math.round(p.fiber_g * f),
+    added_sugar_g: p.added_sugar_g == null ? null : Math.round(p.added_sugar_g * f),
   }
 }
 

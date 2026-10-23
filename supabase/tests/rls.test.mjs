@@ -5,7 +5,7 @@ import { PGlite } from '@electric-sql/pglite'
 import fs from 'fs'
 const db = new PGlite()
 await db.exec(`
-create role anon; create role authenticated;
+create role anon; create role authenticated; create role service_role bypassrls;
 create schema auth;
 create table auth.users (id uuid primary key);
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
@@ -15,7 +15,7 @@ grant usage on schema public to authenticated, anon;
 for (const f of fs.readdirSync(new URL('../migrations/', import.meta.url)).sort()) {
   await db.exec(fs.readFileSync(new URL(`../migrations/${f}`, import.meta.url), 'utf8'))
 }
-await db.exec(`grant all on all tables in schema public to authenticated;`)
+await db.exec(`grant all on all tables in schema public to authenticated; grant usage on schema public to service_role; grant all on all tables in schema public to service_role;`)
 const A='11111111-1111-1111-1111-111111111111', B='22222222-2222-2222-2222-222222222222'
 await db.exec(`insert into auth.users values ('${A}'),('${B}')`)
 const as = async (u, sql) => { await db.exec(`set role authenticated; select set_config('request.jwt.claim.sub','${u}',false);`); try { return await db.query(sql) } finally { await db.exec('reset role') } }
@@ -112,3 +112,37 @@ const cgB=(await as(B,`select count(*)::int c from calorie_goals`)).rows[0].c; c
 try { await as(B, `insert into calorie_goals(user_id,goal_kcal,effective_from) values ('${A}',2500,'2026-10-22')`); bad('B wrote A goal') } catch { ok('calorie goal: B blocked from writing as A') }
 await db.exec('set role anon'); try { await db.query('select * from calorie_goals'); bad('anon read calorie goals') } catch { ok('calorie goal: anon cannot read') } finally { await db.exec('reset role') }
 await db.exec('set role anon'); try { await db.query('select * from protein_entries'); bad('anon read food') } catch { ok('food: anon cannot read') } finally { await db.exec('reset role') }
+// Macros + AI estimates (round 2): fibre / added sugar, fitness goal, AI cache and daily usage
+await as(A, `insert into protein_entries(grams,kcal,fiber_g,added_sugar_g,label,local_date) values (3,180,4,12,'Gulab jamun','2026-10-24')`)
+const fs2=(await as(A,`select fiber_g,added_sugar_g from protein_entries where label='Gulab jamun'`)).rows[0]
+;(fs2.fiber_g===4&&fs2.added_sugar_g===12)?ok('macros: entry stores fibre and added sugar'):bad(JSON.stringify(fs2))
+try { await as(A, `insert into protein_entries(grams,kcal,fiber_g,local_date) values (3,100,-1,'2026-10-24')`); bad('negative fibre') } catch { ok('macros: negative fibre refused') }
+try { await as(A, `insert into quick_adds(name,grams,kcal,added_sugar_g) values ('Sweets',1,100,2000)`); bad('2000 g sugar') } catch { ok('macros: added sugar capped on saved foods') }
+const qid='dddddddd-0000-0000-0000-000000000001'
+await as(A, `insert into quick_adds(id,name,grams,kcal,fiber_g,added_sugar_g,sort_order) values ('${qid}','Oats',13,380,10,0,9)`)
+await as(A, `insert into quick_adds(id,name,grams,kcal,fiber_g,added_sugar_g,sort_order) values ('${qid}','Oats bowl',13,380,10,0,9) on conflict (id) do update set name=excluded.name`)
+const qo=(await as(A,`select name from quick_adds where id='${qid}'`)).rows; (qo.length===1&&qo[0].name==='Oats bowl')?ok('saved food: upsert by app-made id (outbox) replaces'):bad(JSON.stringify(qo))
+try { await as(B, `insert into quick_adds(id,name,grams,sort_order) values ('${qid}','Hijack',5,1) on conflict (id) do update set name=excluded.name`); bad('B overwrote A quick-add') } catch { ok('saved food: B cannot overwrite A\'s saved food by id') }
+await as(A, `update user_settings set fitness_goal='lose_fat'`)
+const fg=(await as(A,`select fitness_goal from user_settings`)).rows[0].fitness_goal; fg==='lose_fat'?ok('goal: fitness goal saved'):bad(fg)
+try { await as(A, `update user_settings set fitness_goal='bulk'`); bad('unknown goal') } catch { ok('goal: unknown fitness goal refused') }
+const fgB=(await as(B,`insert into user_settings default values returning fitness_goal`)).rows[0].fitness_goal; fgB==='maintain'?ok('goal: defaults to maintain'):bad(fgB)
+// AI cache: service role writes, signed-in users read, nobody else writes
+await db.exec(`set role service_role`); await db.query(`insert into ai_food_cache(query_key,query,result,model) values ('2 aloo parathas','2 aloo parathas','{"kcal":600}','claude-opus-5-5')`); await db.exec('reset role')
+ok('ai cache: service role writes')
+const cr2=(await as(B,`select result->>'kcal' k from ai_food_cache where query_key='2 aloo parathas'`)).rows; (cr2.length===1&&cr2[0].k==='600')?ok('ai cache: any signed-in user reads it'):bad(JSON.stringify(cr2))
+try { await as(A, `insert into ai_food_cache(query_key,query,result,model) values ('x','x','{}','m')`); bad('user wrote cache') } catch { ok('ai cache: signed-in user cannot write') }
+const cu=await as(A, `update ai_food_cache set result='{"kcal":1}' returning id`); cu.rows.length===0?ok('ai cache: signed-in user update touches 0 rows'):bad('user updated cache')
+const cdl=await as(A, `delete from ai_food_cache returning id`); cdl.rows.length===0?ok('ai cache: signed-in user delete touches 0 rows'):bad('user deleted cache')
+await db.exec('set role anon'); try { await db.query('select * from ai_food_cache'); bad('anon read cache') } catch { ok('ai cache: anon cannot read') } finally { await db.exec('reset role') }
+// AI usage: counted by the function only, readable by the owner
+await db.exec(`set role service_role`)
+const t1=(await db.query(`select public.ai_food_take('${A}','2026-10-24') n`)).rows[0].n
+const t2=(await db.query(`select public.ai_food_take('${A}','2026-10-24') n`)).rows[0].n
+await db.exec('reset role')
+;(t1===1&&t2===2)?ok('ai usage: take counts up per call'):bad(`${t1},${t2}`)
+const uA=(await as(A,`select count from ai_food_usage`)).rows; (uA.length===1&&uA[0].count===2)?ok('ai usage: owner reads own count'):bad(JSON.stringify(uA))
+const uB=(await as(B,`select count(*)::int c from ai_food_usage`)).rows[0].c; uB===0?ok('ai usage: B sees 0 of A\'s usage'):bad('B sees A usage')
+try { await as(A, `update ai_food_usage set count=0`).then(r=>{ if (r.rows.length) throw 0 }); const after=(await as(A,`select count from ai_food_usage`)).rows[0].count; after===2?ok('ai usage: owner cannot reset own count'):bad('reset to '+after) } catch { ok('ai usage: owner cannot reset own count') }
+try { await as(A, `select public.ai_food_take('${A}','2026-10-24')`); bad('user called take') } catch { ok('ai usage: users cannot call the counter') }
+await db.exec('set role anon'); try { await db.query(`select public.ai_food_take('${A}','2026-10-24')`); bad('anon called take') } catch { ok('ai usage: anon cannot call the counter') } finally { await db.exec('reset role') }

@@ -11,8 +11,12 @@ export type Exercise = {
   created_at: string
 }
 
+export type FitnessGoal = 'lose_fat' | 'maintain' | 'build_muscle'
+export const FITNESS_GOALS: [FitnessGoal, string][] = [['lose_fat', 'Lose fat'], ['maintain', 'Maintain'], ['build_muscle', 'Build muscle']]
+
 export type Settings = {
   body_weight_unit: Unit
+  fitness_goal?: FitnessGoal   // missing in data cached before it existed: treat as 'maintain'
 }
 
 export type LiftSet = { set_number: number; weight: number; unit: Unit }
@@ -26,8 +30,17 @@ export type Session = {
 }
 
 // What a food entry or saved food contributes. grams = protein grams (the column predates calories).
-// kcal/carbs/fat are null for entries logged as protein only (before TF-36, or typed without calories).
-export type Nutrients = { grams: number; kcal: number | null; carbs_g: number | null; fat_g: number | null }
+// The others are null when not known: entries logged as protein only (before TF-36, or typed without calories),
+// and fibre / added sugar for anything logged before they were tracked.
+export type Nutrients = {
+  grams: number
+  kcal: number | null
+  carbs_g: number | null
+  fat_g: number | null
+  fiber_g: number | null
+  added_sugar_g: number | null
+}
+export const NO_NUTRIENTS: Omit<Nutrients, 'grams'> = { kcal: null, carbs_g: null, fat_g: null, fiber_g: null, added_sugar_g: null }
 
 // Where it came from: a dataset food and how much of it. All null for typed entries.
 // portion_label is the dataset's household measure ('1 katori'); null when weighed in grams.
@@ -70,7 +83,7 @@ export const CARDIO_KINDS: [CardioKind, string][] = [
 export const cardioName = (k: CardioKind) => CARDIO_KINDS.find(([id]) => id === k)?.[1] ?? 'Cardio'
 
 // Offered once on an empty list; approximate values, editable
-export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams' | 'kcal'>[] = [
+export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams' | 'kcal'>[] = [ // kcal only; link them to the food list for full macros
   { name: 'Whey scoop', grams: 24, kcal: 120 },
   { name: '3 eggs', grams: 18, kcal: 215 },
   { name: 'Chicken breast 100 g', grams: 31, kcal: 165 },

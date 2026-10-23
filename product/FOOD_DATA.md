@@ -1,6 +1,6 @@
 # Food data: sources and method
 
-TrackFit ships with a built-in list of about 320 foods, so you can log meals by name and portion. You don't have to type grams of protein. This page covers where the numbers come from, how dish values were worked out, and how much to trust each one.
+TrackFit ships with a built-in list of about 330 foods, so you can log meals by name and portion. You don't have to type grams of protein. This page covers where the numbers come from, how dish values were worked out, and how much to trust each one.
 
 - Data file: `app/src/data/foods/foods.json`, which follows the contract in `app/src/data/foods/schema.ts`
 - Generator: `app/src/data/foods/build-foods.mjs`, which holds every ingredient value and recipe and writes `foods.json`
@@ -34,6 +34,8 @@ TrackFit therefore recomputes Indian dishes from USDA ingredients, using cooked 
 
 - **Per 100 g as eaten.** For cooked dishes, this is 100 g of the finished dish, not of the raw ingredients.
 - **`carbs_g` is total carbohydrate, including fibre** (the USDA "by difference" convention). `fiber_g` is part of `carbs_g`, not added to it. Indian tables (IFCT/INDB) usually report *available* carbohydrate, which excludes fibre, so their carb figures are lower for the same food.
+- **`added_sugar_g` is added (free) sugar only**: table sugar, jaggery, honey, syrups, and the sugar put into sweetened products (soft drinks, flavoured yogurt, ketchup, bread, sweets). It does **not** include natural milk sugar (lactose) or the sugar in whole fruit and vegetables, so plain milk, curd and a banana all show 0. Every food has a value, and 0 means none.
+- **`fiber_g`** is filled for every food except makhana, where no reliable fibre value exists. Animal foods are 0.
 - **Energy** is USDA's kcal for single foods. For recipes it is the sum of the ingredients' kcal divided by the cooked weight.
 
 ## 3. How dish values were derived
@@ -54,6 +56,7 @@ Rules followed:
 - **Deep-fried foods.** Oil absorbed is estimated at 15–20% of cooked weight, not the whole frying pot. Fried items are marked `estimate`.
 - **Ignored ingredients.** Salt, dry spices, chillies and herbs are left out (less than 1% of energy).
 - **Meat.** Weights are boneless (edible part). Portion grams exclude bone.
+- **Soya chaap.** Commercial chaap sticks are soy protein plus wheat flour. They are modelled as 1:1 defatted soy flour and maida, boiled to about twice the dry weight. That gives about 173 kcal and 15 g protein per 100 g, which matches common labels (12–20 g protein). Because the ratio is assumed, all chaap foods are `estimate`. Restaurant variants add their own marinade fat, listed in `notes`. For example, malai chaap uses about 50 g cream, cashew, cheese and butter per 6-stick plate.
 - **Proxies.** Rohu and katla use USDA carp. Chana dal and desi chana use USDA chickpeas, which have slightly more fat. Methi leaves use spinach. Poha uses raw white rice. Soya chunks use defatted soy flour. Khoa uses whole-milk powder adjusted to about 15% moisture.
 - **Indian milks** are blends of USDA whole milk, skim milk and cream, mixed to FSSAI fat levels: full cream 6%, toned 3%, double toned 1.5%.
 
@@ -69,13 +72,20 @@ Cross-check against other tables (kcal per 100 g, TrackFit / other):
 | Naan (restaurant) | 305 | USDA naan 291, FNDDS 311 |
 | Samosa | 327 | FNDDS 310 |
 
+### Added sugar method
+
+- **Recipes.** The added sugar is the sugar, jaggery, honey or condensed milk in the recipe, divided by the cooked weight, the same way as the other nutrients. For example, chai with 2 tsp sugar comes to 6.1 g per 100 g, and besan ladoo to 39 g.
+- **Sweetened products from USDA** (soft drinks, ketchup, bread, peanut butter, burgers). USDA gives total sugars, not added sugars. The added part is total sugars minus an estimate of the natural sugars, for example the tomato sugar in ketchup or the lactose in condensed milk. All sugar in cola and table sugar counts as added. Honey and jaggery are counted in full, following the WHO definition of free sugars.
+- **Typical labels.** For flavoured Greek yogurt, labels show about 11–12 g total sugar per 100 g, of which about 8 g is added.
+- **Restaurant sweets and drinks** (jalebi, gulab jamun, rasgulla, kulfi, cold coffee) use estimated syrup or sugar uptake.
+
 ## 4. Confidence levels (shown to the user)
 
 | Level | Meaning | Count |
 |---|---|---|
-| `measured` | Taken directly from a lab-analysed USDA table entry, or a documented equivalent food (e.g. soya chunks = defatted soy flour) | 112 |
+| `measured` | Taken directly from a lab-analysed USDA table entry, or a documented equivalent food (e.g. soya chunks = defatted soy flour) | 115 |
 | `calculated` | A standard recipe computed from measured ingredients, or a documented blend (Indian milks) | 110 |
-| `estimate` | A typical value with no direct lab source. This covers all restaurant dishes; deep-fried and syrup-soaked foods; paneer, makhana, jaggery and whey powder; and any recipe where estimated ingredients supply more than 20% of the energy (so all paneer dishes). The app shows these as "about" | 97 |
+| `estimate` | A typical value with no direct lab source. This covers all restaurant dishes; deep-fried and syrup-soaked foods; paneer, makhana, jaggery and whey powder; and any recipe where estimated ingredients supply more than 20% of the energy (so all paneer and soya chaap dishes). The app shows these as "about" | 105 |
 
 ## 5. Household measures
 
@@ -97,6 +107,9 @@ Cross-check against other tables (kcal per 100 g, TrackFit / other):
 | 1 tsp oil/ghee/sugar | 5 g | |
 | 1 tbsp oil / ghee / peanut butter | 14 / 14 / 16 g | |
 | 1 scoop whey | 30 g | |
+| 1 soya chaap stick | 50 g (without the wooden stick) | a plate is about 6 sticks |
+| 1 cup flavoured Greek yogurt | 90 g | |
+| 1 can soft drink | 330 ml (about 340 g) | |
 | 1 slice bread | 25 g (white), 28 g (brown) | |
 | 1 handful nuts / chana | 25–30 g | |
 
@@ -104,6 +117,7 @@ Cross-check against other tables (kcal per 100 g, TrackFit / other):
 
 - **Restaurant food is uncertain.** Oil, cream, butter and portion size vary 2–3 times between restaurants. A plate of biryani can be anywhere from 450 to 900 kcal.
 - **Paneer** has no open lab value. TrackFit uses 18.5 g protein and 22 g fat per 100 g, typical of full-fat paneer labels. Other tables give 15.9 g protein (USDA FNDDS) to 26 g (the Norwegian food table, which describes a drier pressed paneer). If you buy one brand, use its label.
+- **Added sugar in sweetened products** is derived from total sugars and is approximate (±2 g per 100 g). Sweets and restaurant desserts can vary by ±30%.
 - **Home oil use** is the biggest variable for calories in home dishes. Protein is much less affected.
 - **USDA ingredients are US samples.** Indian varieties (desi chana, local rice, buffalo-milk curd) differ by a few per cent.
 - **Not covered**: packaged and branded foods (phase 2), regional specialities outside the common North and South Indian set, alcohol, and micronutrients.
@@ -119,6 +133,7 @@ Cross-check against other tables (kcal per 100 g, TrackFit / other):
    - Never set `measured` unless the value comes straight from a lab table entry with a `ref`.
    - Give the source and `ref` (FDC id), and don't invent ids or URLs.
    - Keep `notes` under 240 characters.
+   - Every food needs `added_sugar_g`. Either put the sugar in the recipe or set it on the ingredient's `SUG` entry.
 4. Bump `VERSION` in the generator.
 
 ## 8. Phase 2: Open Food Facts (packaged foods)

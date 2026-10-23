@@ -293,3 +293,30 @@ nav.tabs { grid-template-columns: repeat(5, 1fr); }
 .swatch.eaten { background: var(--ink); }
 .swatch.burnt { border: 1.5px solid var(--ink); }
 .food-name .cap { white-space: nowrap; }
+
+/* Macros panel, linking foods, AI estimates (TF-36 round 2). Protein yellow, everything else graphite. */
+.macros-btn { margin-top: 6px; }
+.btn.small { min-height: 36px; padding: 6px 14px; font-size: 14px; }
+.link.small { min-height: 32px; padding: 4px 0; font-size: 13px; }
+.ink { color: var(--ink); }
+.note { margin: 0; }
+.nudge { margin: -4px 2px 0; }
+.label { font-size: 13px; font-weight: 600; color: var(--steel); }
+.macros { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
+.macro-row { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 4px 8px; }
+.macro-row .num { font-size: 17px; }
+.macro-label { font-weight: 600; font-size: 14px; }
+.macro-row .meter { grid-column: 1 / -1; position: relative; overflow: visible; }
+.macro-row .meter > span { border-radius: 2px; }
+.meter.protein { background: var(--protein-track); }
+.meter.protein > span { background: var(--protein); }
+.meter .tick { position: absolute; top: -3px; width: 2px; height: 10px; background: var(--steel); border-radius: 1px; }
+.macro-status { grid-column: 1 / -1; }
+.food-row .link-btn { grid-column: 1 / -1; justify-self: start; margin-top: -6px; }
+.link-food { border-top: 1px solid var(--line); padding-top: 8px; }
+.link-food > .card { padding: 0; }
+.ai-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px 6px; }
+.ai-grid .cap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ai-grid label { display: flex; flex-direction: column; gap: 2px; }
+.form .ai-grid input { height: 44px; font-size: 16px; padding: 0 10px; width: 100%; }
+.ai-grid label.tone-protein input { color: var(--protein-text); }

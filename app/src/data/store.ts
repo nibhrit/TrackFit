@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import {
-  DEFAULT_GOAL, NO_FOOD, STARTERS, STARTER_FOODS,
-  type BodyWeight, type Cardio, type CalorieGoal, type DayHabits, type Exercise, type FoodRef, type HabitKey, type HabitResult,
+  DEFAULT_GOAL, NO_FOOD, NO_NUTRIENTS, STARTERS, STARTER_FOODS,
+  type BodyWeight, type Cardio, type CalorieGoal, type DayHabits, type Exercise, type FitnessGoal, type FoodRef, type HabitKey, type HabitResult,
   type LiftSet, type MuscleGroup, type Nutrients, type ProteinEntry, type ProteinGoal, type QuickAdd,
   type Session, type Settings, type Splits, type Unit,
 } from './types'
@@ -46,11 +46,13 @@ type Op =
   | { kind: 'settings_save'; settings: Settings }
   | { kind: 'cardio_save'; entry: Cardio }
   | { kind: 'cardio_delete'; id: string }
+  | { kind: 'quick_save'; quick: QuickAdd }
+  | { kind: 'quick_delete'; id: string }
 
 type Toast = { id: number; message: string; undo?: () => void }
 
 const EMPTY: State = {
-  loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {}, sessions: [],
+  loaded: false, exercises: [], settings: { body_weight_unit: 'kg', fitness_goal: 'maintain' }, splits: {}, sessions: [],
   protein: [], quickAdds: [], goals: [], kcalGoals: [], habits: {}, weights: [], cardio: [], pending: 0,
 }
 
@@ -103,7 +105,7 @@ export async function loadForUser(id: string) {
   const today = localDate()
   const [ex, st, sp, ss, pe, qa, pg, kg, hb, bw, cd] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
-    supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
+    supabase.from('user_settings').select('body_weight_unit,fitness_goal').maybeSingle(),
     fetchSplits(addDays(today, -42), addDays(today, 42)),
     supabase.from('lift_sessions')
       .select('id,exercise_id,performed_at,local_date,lift_sets(set_number,weight,unit)')
@@ -135,7 +137,7 @@ export async function loadForUser(id: string) {
     splits: applySplitOutbox(sp),
     sessions: applyLiftOutbox(sessions), // keep unsynced changes on top of what the server has
     protein: applyProteinOutbox((pe.data as ProteinEntry[]).map(numericPortion)),
-    quickAdds: (qa.data as QuickAdd[]).map(numericPortion),
+    quickAdds: applyQuickOutbox((qa.data as QuickAdd[]).map(numericPortion)),
     goals: applyGoalOutbox(pg.data as ProteinGoal[]),
     kcalGoals: applyKcalGoalOutbox(kg.data as CalorieGoal[]),
     habits: applyHabitOutbox(Object.fromEntries((hb.data as DayHabits[]).map((d) => [d.date, d]))),
@@ -284,9 +286,15 @@ export function groupsOn(s: State, date: string): MuscleGroup[] {
 let flushing = false
 
 function enqueue(op: Op) {
-  // A newer save or delete of the same session replaces any queued one
+  // A newer save or delete of the same thing replaces any queued one.
+  // A save takes the queued one's place (so a saved food created offline is still sent before entries that use it);
+  // a delete goes to the back (after anything that still refers to it).
   const key = opKey(op)
-  outbox = [...outbox.filter((o) => opKey(o) !== key), op]
+  const at = outbox.findIndex((o) => opKey(o) === key)
+  const isSave = !op.kind.endsWith('delete')
+  outbox = at >= 0 && isSave
+    ? outbox.map((o, i) => (i === at ? op : o)).filter((o, i) => i === at || opKey(o) !== key)
+    : [...outbox.filter((o) => opKey(o) !== key), op]
   persistOutbox()
   flushOutbox()
 }
@@ -312,12 +320,20 @@ function opKey(op: Op) {
     case 'settings_save': return 'settings'
     case 'cardio_save': return `cardio:${op.entry.id}`
     case 'cardio_delete': return `cardio:${op.id}`
+    case 'quick_save': return `quick:${op.quick.id}`
+    case 'quick_delete': return `quick:${op.id}`
   }
 }
 
 function applyCardioOutbox(list: Cardio[]) {
   return outbox.reduce((l, op) =>
     op.kind === 'cardio_save' ? upsertCardio(l, op.entry) : op.kind === 'cardio_delete' ? l.filter((x) => x.id !== op.id) : l,
+  list)
+}
+
+function applyQuickOutbox(list: QuickAdd[]) {
+  return outbox.reduce((l, op) =>
+    op.kind === 'quick_save' ? upsertQuick(l, op.quick) : op.kind === 'quick_delete' ? l.filter((q) => q.id !== op.id) : l,
   list)
 }
 
@@ -392,7 +408,13 @@ function send(op: Op) {
     case 'cardio_delete':
       return supabase.from('cardio_sessions').delete().eq('id', op.id)
     case 'settings_save':
-      return supabase.from('user_settings').update({ body_weight_unit: op.settings.body_weight_unit, updated_at: new Date().toISOString() }).eq('user_id', userId!)
+      return supabase.from('user_settings').update({
+        body_weight_unit: op.settings.body_weight_unit, fitness_goal: op.settings.fitness_goal, updated_at: new Date().toISOString(),
+      }).eq('user_id', userId!)
+    case 'quick_save':
+      return supabase.from('quick_adds').upsert(op.quick)
+    case 'quick_delete':
+      return supabase.from('quick_adds').delete().eq('id', op.id)
   }
 }
 
@@ -425,7 +447,7 @@ if (typeof window !== 'undefined') {
 // Entries live in protein_entries: protein grams always, calories/carbs/fat and the food + portion when known.
 // Ops keep their 'protein_*' names so changes already queued on a phone still sync after an update.
 
-const FOOD_COLS = 'grams,kcal,carbs_g,fat_g,food_id,portion_label,portion_qty,portion_grams'
+const FOOD_COLS = 'grams,kcal,carbs_g,fat_g,fiber_g,added_sugar_g,food_id,portion_label,portion_qty,portion_grams'
 const QUICK_COLS = `id,name,sort_order,${FOOD_COLS}`
 
 // Postgres numeric columns can arrive as strings
@@ -440,6 +462,18 @@ const upsertEntry = (list: ProteinEntry[], e: ProteinEntry) => byTime([...list.f
 
 export const proteinOn = (s: State, date: string) => s.protein.filter((e) => e.local_date === date)
 export const proteinTotal = (s: State, date: string) => proteinOn(s, date).reduce((sum, e) => sum + e.grams, 0)
+
+// Today's totals for the Macros panel. Unknown values (old protein-only entries, foods without fibre data) aren't guessed:
+// each nutrient also says how many entries didn't have it.
+export type MacroKey = 'kcal' | 'grams' | 'carbs_g' | 'fat_g' | 'fiber_g' | 'added_sugar_g'
+export function macrosOn(s: State, date: string): Record<MacroKey, { total: number; missing: number }> {
+  const day = proteinOn(s, date)
+  const sum = (k: MacroKey) => ({
+    total: day.reduce((n, e) => n + (e[k] ?? 0), 0),
+    missing: day.filter((e) => e[k] == null).length,
+  })
+  return { kcal: sum('kcal'), grams: sum('grams'), carbs_g: sum('carbs_g'), fat_g: sum('fat_g'), fiber_g: sum('fiber_g'), added_sugar_g: sum('added_sugar_g') }
+}
 
 // Calories eaten on a date. Entries logged as protein only have no calories: counted in `missing`, not guessed.
 export function kcalEatenOn(s: State, date: string) {
@@ -479,12 +513,12 @@ export function logFood(input: NewEntry) {
 
 // Typed protein only (no calories)
 export const logProtein = (grams: number, label: string | null) =>
-  logFood({ grams, kcal: null, carbs_g: null, fat_g: null, ...NO_FOOD, label })
+  logFood({ grams, ...NO_NUTRIENTS, ...NO_FOOD, label })
 
 export const logQuickAdd = (q: QuickAdd) =>
   logFood({
-    grams: q.grams, kcal: q.kcal, carbs_g: q.carbs_g, fat_g: q.fat_g, food_id: q.food_id,
-    portion_label: q.portion_label, portion_qty: q.portion_qty, portion_grams: q.portion_grams,
+    grams: q.grams, kcal: q.kcal, carbs_g: q.carbs_g, fat_g: q.fat_g, fiber_g: q.fiber_g ?? null, added_sugar_g: q.added_sugar_g ?? null,
+    food_id: q.food_id, portion_label: q.portion_label, portion_qty: q.portion_qty, portion_grams: q.portion_grams,
     label: q.name, quick_add_id: q.id,
   })
 
@@ -537,7 +571,19 @@ export function setKcalGoal(goal_kcal: number): string | null {
 const upsertKcalGoal = (list: CalorieGoal[], g: CalorieGoal) =>
   [...list.filter((x) => x.effective_from !== g.effective_from), g].sort((a, b) => a.effective_from.localeCompare(b.effective_from))
 
-// Quick-adds: saved foods. Changed rarely, so saved directly (with rollback) rather than via the outbox.
+// Quick-adds: saved foods. Saved through the outbox like everything else, so they can be added or fixed with no signal.
+// The app makes their ids, so a retried save updates the same row.
+
+const upsertQuick = (list: QuickAdd[], q: QuickAdd) => {
+  const i = list.findIndex((x) => x.id === q.id)
+  return i < 0 ? [...list, q] : list.map((x, k) => (k === i ? q : x))
+}
+
+function saveQuick(q: QuickAdd) {
+  set({ quickAdds: upsertQuick(state.quickAdds, q) })
+  enqueue({ kind: 'quick_save', quick: q })
+}
+
 // kcal is optional (null = not known); a saved food needs protein or calories
 function validFood(name: string, grams: number, kcal: number | null) {
   if (!name.trim()) return 'Enter a name.'
@@ -548,63 +594,60 @@ function validFood(name: string, grams: number, kcal: number | null) {
   return null
 }
 
+const nextSort = () => (state.quickAdds[state.quickAdds.length - 1]?.sort_order ?? 0) + 1
+
 // A typed saved food, or one made from a dataset food + portion (pass its nutrients and ref)
-export async function addQuickAdd(name: string, n: Nutrients, ref: FoodRef = NO_FOOD): Promise<string | null> {
+export function addQuickAdd(name: string, n: Nutrients, ref: FoodRef = NO_FOOD): string | null {
   const bad = validFood(name, n.grams, n.kcal)
   if (bad) return bad
-  const sort_order = (state.quickAdds[state.quickAdds.length - 1]?.sort_order ?? 0) + 1
-  const { data, error } = await supabase.from('quick_adds').insert({ name: name.trim(), ...n, ...ref, sort_order }).select(QUICK_COLS).single()
-  if (error) return 'Couldn’t save. Check your connection.'
-  set({ quickAdds: [...state.quickAdds, numericPortion(data as QuickAdd)] })
+  saveQuick({ id: crypto.randomUUID(), name: name.trim(), ...n, ...ref, sort_order: nextSort() })
   return null
 }
 
-export async function updateQuickAdd(id: string, name: string, grams: number, kcal: number | null): Promise<string | null> {
+export function updateQuickAdd(id: string, name: string, grams: number, kcal: number | null): string | null {
   const bad = validFood(name, grams, kcal)
   if (bad) return bad
   const q = state.quickAdds.find((x) => x.id === id)
-  // Changing the numbers of a dataset food turns it into a typed one: its carbs, fat and portion no longer match
-  const changed = q && (q.grams !== grams || q.kcal !== kcal)
-  const patch = { name: name.trim(), grams, kcal, ...(changed ? { carbs_g: null, fat_g: null, ...NO_FOOD } : {}) }
-  const before = state.quickAdds
-  set({ quickAdds: before.map((x) => (x.id === id ? { ...x, ...patch } : x)) })
-  const { error } = await supabase.from('quick_adds').update(patch).eq('id', id)
-  if (error) { set({ quickAdds: before }); return 'Couldn’t save. Check your connection.' }
+  if (!q) return null
+  // Changing the numbers of a dataset food turns it into a typed one: its other nutrients and portion no longer match
+  const changed = q.grams !== grams || q.kcal !== kcal
+  saveQuick({ ...q, name: name.trim(), grams, kcal, ...(changed ? { ...NO_NUTRIENTS, kcal, ...NO_FOOD } : {}) })
   return null
 }
 
-export async function deleteQuickAdd(id: string) {
-  const before = state.quickAdds
-  set({ quickAdds: before.filter((q) => q.id !== id) })
-  const { error } = await supabase.from('quick_adds').delete().eq('id', id)
-  if (error) { set({ quickAdds: before }); showToast('Couldn’t delete. Check your connection.') }
+// Link a saved food to a food from the list (or an AI estimate): it takes that food's nutrients and portion
+export function linkQuickAdd(id: string, n: Nutrients, ref: FoodRef) {
+  const q = state.quickAdds.find((x) => x.id === id)
+  if (q) saveQuick({ ...q, ...n, ...ref })
 }
 
-export async function moveQuickAdd(id: string, dir: -1 | 1) {
+export function deleteQuickAdd(id: string) {
+  const q = state.quickAdds.find((x) => x.id === id)
+  if (!q) return
+  set({ quickAdds: state.quickAdds.filter((x) => x.id !== id) })
+  enqueue({ kind: 'quick_delete', id })
+  showToast(`Deleted ${q.name}`, () => saveQuick(q))
+}
+
+export function moveQuickAdd(id: string, dir: -1 | 1) {
   const list = [...state.quickAdds]
   const i = list.findIndex((q) => q.id === id)
   const j = i + dir
   if (i < 0 || j < 0 || j >= list.length) return
   ;[list[i], list[j]] = [list[j], list[i]]
   const renumbered = list.map((q, k) => ({ ...q, sort_order: k + 1 }))
-  const before = state.quickAdds
   set({ quickAdds: renumbered })
-  const results = await Promise.all(
-    [renumbered[i], renumbered[j]].map((q) => supabase.from('quick_adds').update({ sort_order: q.sort_order }).eq('id', q.id)),
-  )
-  if (results.some((r) => r.error)) { set({ quickAdds: before }); showToast('Couldn’t reorder. Check your connection.') }
+  for (const q of [renumbered[i], renumbered[j]]) enqueue({ kind: 'quick_save', quick: q })
 }
 
-export async function addStarterFoods(): Promise<string | null> {
+export function addStarterFoods(): string | null {
   const have = new Set(state.quickAdds.map((q) => q.name.toLowerCase()))
-  const rows = STARTER_FOODS.filter((f) => !have.has(f.name.toLowerCase()))
-    .map((f, k) => ({ ...f, sort_order: state.quickAdds.length + k + 1 }))
-  if (!rows.length) return null
-  const { data, error } = await supabase.from('quick_adds').insert(rows).select(QUICK_COLS)
-  if (error) return 'Couldn’t add them. Check your connection.'
-  set({ quickAdds: [...state.quickAdds, ...(data as QuickAdd[]).map(numericPortion)] })
+  STARTER_FOODS.filter((f) => !have.has(f.name.toLowerCase()))
+    .forEach((f) => saveQuick({ id: crypto.randomUUID(), ...NO_NUTRIENTS, ...NO_FOOD, ...f, sort_order: nextSort() }))
   return null
 }
+
+export const foodsWithoutKcal = (s: State) => s.quickAdds.filter((q) => q.kcal == null)
 
 // ---------- Habits ----------
 
@@ -636,6 +679,14 @@ export function deleteWeight(date: string) {
   set({ weights: state.weights.filter((x) => x.date !== date) })
   enqueue({ kind: 'weight_delete', date })
   showToast('Weight deleted', () => logWeight(w.weight, w.unit, w.date))
+}
+
+export const fitnessGoal = (s: State): FitnessGoal => s.settings.fitness_goal ?? 'maintain'
+
+export function setFitnessGoal(fitness_goal: FitnessGoal) {
+  const settings = { ...state.settings, fitness_goal }
+  set({ settings })
+  enqueue({ kind: 'settings_save', settings })
 }
 
 export function setWeightUnit(unit: Unit) {

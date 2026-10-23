@@ -2,7 +2,8 @@ import { goalFor, proteinTotal, useStore } from '../data/store'
 import { localDate } from '../lib/dates'
 
 // Today's protein vs goal: yellow arc on a pale track, check mark once the goal is hit.
-export default function ProteinSummary() {
+// children: an optional action under the numbers (the Food tab's Macros button)
+export default function ProteinSummary({ children }: { children?: React.ReactNode }) {
   const store = useStore()
   const today = localDate()
   const total = proteinTotal(store, today)
@@ -21,6 +22,7 @@ export default function ProteinSummary() {
       <div>
         <div><span className="num big">{total}</span> <span className="cap">/ {goal} g protein</span></div>
         {left > 0 ? <div className="cap">{left} g to go today</div> : <div className="goal-hit">Goal hit</div>}
+        {children}
       </div>
     </div>
   )

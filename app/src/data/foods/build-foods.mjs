@@ -163,6 +163,9 @@ const ING = {
   puffed_rice: { fdc: 173912, kcal: 402, p: 6.3, c: 89.8, f: 0.5, fib: 1.7, desc: "Cereals ready-to-eat, rice, puffed, fortified" },
   egg_yolk: { fdc: 172184, kcal: 322, p: 15.86, c: 3.59, f: 26.54, fib: 0.0, desc: "Egg, yolk, raw, fresh" },
   dark_choc: { fdc: 170273, kcal: 598, p: 7.79, c: 45.9, f: 42.63, fib: 10.9, desc: "Chocolate, dark, 70-85% cacao solids" },
+  cola: { fdc: 174852, kcal: 42, p: 0, c: 10.36, f: 0.25, fib: 0, desc: "Beverages, carbonated, cola, regular" },
+  lemon_soda: { fdc: 173205, kcal: 41, p: 0.09, c: 10.42, f: 0, fib: 0, desc: "Beverages, carbonated, lemon-lime soda, no caffeine" },
+  juice_drink: { fdc: 169044, kcal: 54, p: 0.2, c: 13.41, f: 0, fib: 0.2, desc: "Beverages, Orange juice drink" },
 }
 
 // ---------------------------------------------------------------------------
@@ -171,8 +174,27 @@ const ING = {
 //                  ingredients supply > 20% of its energy is downgraded to 'estimate'.
 //    proxy      -> a USDA entry for a compositionally equivalent food.
 // ---------------------------------------------------------------------------
+// Added (free) sugar per 100 g ('sug'). Only sugars added during manufacture or cooking: table sugar,
+// jaggery, honey, syrups, and the sugar inside sweetened products. Not lactose, not fruit sugar.
+// For sweetened products the added part = USDA total sugars minus the natural part (estimated).
+const SUG = {
+  sugar: 99.8,          // USDA total sugars, all added
+  honey: 82.1,          // USDA total sugars; honey counts as free sugar (WHO)
+  condensed: 42,        // 54.4 total sugars minus ~12 g lactose
+  ketchup: 19,          // 21.3 total minus ~2.5 g from tomato
+  dark_choc: 24,        // USDA total sugars, all added
+  bread_white: 4.5,     // 5.7 total; most is added
+  bread_brown: 3.5,     // 4.3 total
+  bun: 6,               // 7.3 total
+  peanut_butter: 5,     // 10.5 total minus ~5 g natural peanut sugars
+  ff_burger: 4.5, ff_cheeseburger: 4, pizza_frozen: 2,
+  cola: 10.4, lemon_soda: 10.4, juice_drink: 11,
+}
+for (const [k, v] of Object.entries(SUG)) ING[k].sug = v
+for (const k of ['prawn', 'prawn_cooked']) ING[k].fib = 0 // animal foods: no fibre (USDA leaves it blank)
+
 const blend = (parts) => {
-  const out = { kcal: 0, p: 0, c: 0, f: 0, fib: 0 }
+  const out = { kcal: 0, p: 0, c: 0, f: 0, fib: 0, sug: 0 }
   for (const [k, frac] of parts) for (const n of Object.keys(out)) out[n] += (ING[k][n] ?? 0) * frac
   return out
 }
@@ -186,10 +208,13 @@ ING.soya_chunks = { ...ING.soy_flour, proxy: 'USDA defatted soy flour (FDC 17427
 ING.khoa = { ...ING.milk_powder, kcal: 421, p: 22.4, c: 32.7, f: 22.7, fib: 0, proxy: 'USDA whole milk powder diluted to ~15% moisture (khoa ~ 20-25% moisture)' }
 ING.paneer = { kcal: 280, p: 18.5, c: 2.0, f: 22.0, fib: 0, est: true }
 ING.paneer_low = { kcal: 165, p: 18.0, c: 4.0, f: 8.5, fib: 0, est: true }
-ING.makhana = { kcal: 347, p: 9.7, c: 76.9, f: 0.1, fib: 0, est: true }
-ING.jaggery = { kcal: 383, p: 0.4, c: 95.0, f: 0.1, fib: 0, est: true }
+ING.makhana = { kcal: 347, p: 9.7, c: 76.9, f: 0.1, est: true } // fibre not known
+ING.jaggery = { kcal: 383, p: 0.4, c: 95.0, f: 0.1, fib: 0, sug: 90, est: true }
 ING.whey = { kcal: 400, p: 78.0, c: 8.0, f: 6.0, fib: 0, est: true }
 ING.water = { kcal: 0, p: 0, c: 0, f: 0, fib: 0 }
+// Soya chaap (commercial stick product): soy protein + wheat flour ~1:1, kneaded, shaped on sticks and boiled.
+// Modelled as 50 g defatted soy flour + 50 g maida -> 200 g boiled chaap. Ratio is assumed, so it is an estimate.
+ING.chaap = { ...blend([['soy_flour', 0.25], ['maida', 0.25]]), est: true }
 
 // ---------------------------------------------------------------------------
 // 3. Helpers
@@ -203,6 +228,7 @@ const r1 = (x) => Math.round(x * 10) / 10
 const per100 = (n) => {
   const o = { kcal: Math.round(n.kcal), protein_g: r1(n.p), carbs_g: r1(n.c), fat_g: r1(n.f) }
   if (n.fib !== undefined && n.fib !== null && !Number.isNaN(n.fib)) o.fiber_g = r1(n.fib)
+  o.added_sugar_g = r1(Math.min(n.sug ?? 0, n.c))
   return o
 }
 // P('1 katori', 150, true)
@@ -225,18 +251,20 @@ function single(id, name, aliases, key, portions, confidence, source, notes, cat
 
 // A recipe: raw ingredient grams + cooked weight.
 function recipe({ id, name, aliases, cat = 'indian_home', ing, cooked, portions, notes, conf, source }) {
-  const sum = { kcal: 0, p: 0, c: 0, f: 0, fib: 0 }
-  let rawWeight = 0, estKcal = 0
+  const sum = { kcal: 0, p: 0, c: 0, f: 0, fib: 0, sug: 0 }
+  let rawWeight = 0, estKcal = 0, carbsNoFib = 0
   for (const [k, g] of ing) {
     const i = ING[k]
     if (!i) throw new Error(`${id}: unknown ingredient ${k}`)
     rawWeight += g
     for (const n of Object.keys(sum)) sum[n] += ((i[n] ?? 0) * g) / 100
     if (i.est) estKcal += (i.kcal * g) / 100
+    if (i.fib === undefined) carbsNoFib += (i.c * g) / 100
   }
   if (!(cooked > 0)) throw new Error(`${id}: cooked weight missing`)
   const n = {}
   for (const k of Object.keys(sum)) n[k] = (sum[k] * 100) / cooked
+  if (carbsNoFib > 0.2 * sum.c) delete n.fib // fibre unknown for a main ingredient: leave it blank
   let confidence = conf ?? (cat === 'restaurant' ? 'estimate' : 'calculated')
   if (confidence === 'calculated' && estKcal > 0.2 * sum.kcal) confidence = 'estimate'
   add({
@@ -289,11 +317,15 @@ single('paneer-low-fat', 'Paneer, low fat', ['low fat paneer', 'skimmed paneer']
 usda('tofu-firm', 'Tofu, firm', ['tofu', 'soya paneer', 'bean curd'], 'tofu', [P('100 g', 100, true)])
 single('soya-chunks-dry', 'Soya chunks, dry', ['soya chunks', 'soya badi', 'nutrela', 'meal maker', 'soy chunks'], 'soya_chunks', [P('1 katori dry', 30, true), P('50 g dry', 50)], 'measured',
   USDA(174275), 'Values of USDA defatted soy flour; soya chunks are extruded defatted soy flour. Weigh dry: 30 g dry ~ 90 g soaked.')
-single('whey-protein-concentrate', 'Whey protein, concentrate (generic)', ['whey', 'protein powder', 'whey protein', 'protein shake'], 'whey', [P('1 scoop', 30, true), P('half scoop', 15)], 'estimate',
+recipe({ id: 'soya-chaap-boiled', name: 'Soya chaap, plain (boiled sticks)', aliases: ['soya chaap', 'soya chap', 'soy chaap', 'chaap', 'chap', 'soya chaap stick', 'frozen soya chaap'], cat: 'basic',
+  ing: [['chaap', 200]], cooked: 200, portions: [P('1 stick', 50, true), P('1 plate (~6 sticks)', 300)],
+  source: EST_SRC('TrackFit estimate: soy protein + wheat flour 1:1 (USDA defatted soy flour FDC 174275 + maida FDC 168894)'),
+  notes: 'Assumes 1:1 soy flour : maida, boiled (~200 g per 100 g dry mix). Brands vary (12-20 g protein/100 g); stick weight excludes the wooden stick.' })
+single('whey-protein-concentrate', 'Whey protein, concentrate (generic)', ['whey', 'protein powder', 'whey protein', 'protein shake', 'whey scoop', 'protein scoop', 'scoop whey', '1 scoop whey'], 'whey', [P('1 scoop', 30, true), P('half scoop', 15)], 'estimate',
   EST_SRC('TrackFit estimate (typical 80% whey concentrate label)'), 'Mixed with water. Brands range 70-80% protein; use your tub label for exact values.')
 add({ id: 'whey-protein-isolate', name: 'Whey protein, isolate (generic)', aliases: ['whey isolate', 'iso whey', 'protein powder'], category: 'basic',
-  per100g: { kcal: 370, protein_g: 88, carbs_g: 2, fat_g: 1 }, portions: [P('1 scoop', 30, true)], source: EST_SRC('TrackFit estimate (typical 90% whey isolate label)'), confidence: 'estimate', notes: 'Mixed with water. Use your tub label for exact values.' })
-usda('peanut-butter', 'Peanut butter', ['peanut butter', 'pb', 'moongphali butter'], 'peanut_butter', [P('1 tbsp', 16, true), P('2 tbsp', 32)])
+  per100g: { kcal: 370, protein_g: 88, carbs_g: 2, fat_g: 1, fiber_g: 0, added_sugar_g: 0 }, portions: [P('1 scoop', 30, true)], source: EST_SRC('TrackFit estimate (typical 90% whey isolate label)'), confidence: 'estimate', notes: 'Mixed with water. Use your tub label for exact values.' })
+usda('peanut-butter', 'Peanut butter', ['peanut butter', 'pb', 'moongphali butter'], 'peanut_butter', [P('1 tbsp', 16, true), P('2 tbsp', 32)], 'Sweetened commercial style. Added sugar (5 g) estimated from USDA total sugars; unsweetened PB has ~0.')
 
 // Dairy
 single('milk-full-cream', 'Milk, full cream (6% fat)', ['full cream milk', 'doodh', 'gold milk', 'whole milk'], 'milk_full_in', [P('1 glass', 250, true), P('1 cup', 150)], 'calculated',
@@ -308,8 +340,12 @@ usda('milk-buffalo', 'Milk, buffalo', ['buffalo milk', 'bhains ka doodh', 'doodh
 usda('curd-whole-milk', 'Curd (dahi), whole milk', ['dahi', 'curd', 'yogurt', 'thayir', 'mosaru'], 'curd', [P('1 katori', 150, true), P('2 tbsp', 30)])
 single('curd-toned-milk', 'Curd (dahi), toned milk', ['dahi', 'curd', 'low fat dahi', 'yogurt'], 'curd_toned', [P('1 katori', 150, true), P('2 tbsp', 30)], 'calculated',
   { name: 'Calculated from USDA FoodData Central', ref: 'FDC 171265 + FDC 171269' }, 'Home curd set from toned (3%) milk.')
-usda('greek-yogurt-nonfat', 'Greek yogurt, plain, nonfat', ['greek yogurt', 'hung curd', 'skyr'], 'greek_nf', [P('1 cup', 150, true), P('1 small tub', 100)])
-usda('greek-yogurt-whole', 'Greek yogurt, plain, whole milk', ['greek yogurt', 'hung curd'], 'greek_whole', [P('1 cup', 150, true), P('1 small tub', 100)])
+usda('greek-yogurt-nonfat', 'Greek yogurt, plain, nonfat', ['greek yogurt', 'greek yoghurt', 'plain greek yogurt', 'hung curd', 'skyr'], 'greek_nf', [P('1 cup', 150, true), P('1 small tub', 100)])
+usda('greek-yogurt-whole', 'Greek yogurt, plain, whole milk', ['greek yogurt', 'greek yoghurt', 'plain greek yogurt', 'hung curd'], 'greek_whole', [P('1 cup', 150, true), P('1 small tub', 100)])
+add({ id: 'greek-yogurt-flavoured', name: 'Greek yogurt, fruit flavoured', aliases: ['flavoured greek yogurt', 'flavored greek yogurt', 'greek yogurt', 'greek yoghurt', 'epigamia', 'fruit yogurt', 'mango greek yogurt', 'strawberry greek yogurt', 'blueberry greek yogurt'], category: 'basic',
+  per100g: { kcal: 105, protein_g: 7.5, carbs_g: 13.5, fat_g: 2.4, fiber_g: 0.2, added_sugar_g: 8 }, portions: [P('1 cup', 90, true), P('1 large cup', 120)],
+  source: EST_SRC('TrackFit estimate (typical Indian flavoured Greek yogurt labels)'), confidence: 'estimate',
+  notes: 'Fruit-flavoured Greek yogurt (e.g. mango, strawberry). Labels: ~11-12 g total sugar per 100 g, ~8 g of it added. Check your cup.' })
 usda('cheese-slice', 'Cheese slice (processed)', ['cheese', 'cheese slice', 'amul slice'], 'cheese', [P('1 slice', 20, true)])
 usda('mozzarella', 'Mozzarella cheese', ['mozzarella', 'pizza cheese'], 'mozzarella', [P('2 tbsp grated', 28, true)])
 usda('cheddar', 'Cheddar cheese', ['cheddar', 'cheese block'], 'cheddar', [P('1 cube', 20, true)])
@@ -332,8 +368,8 @@ single('poha-dry', 'Poha (flattened rice), dry', ['poha', 'aval', 'chivda', 'ava
   USDA(168877), 'Values of raw white rice; flattened rice has very similar macros.')
 single('makhana', 'Makhana (fox nuts), plain', ['makhana', 'fox nuts', 'lotus seeds', 'phool makhana'], 'makhana', [P('1 cup', 15, true), P('1 bowl', 30)], 'estimate',
   EST_SRC('TrackFit estimate (Indian food-table values as commonly cited)'), 'Popped Euryale ferox seeds. Not in USDA; value as widely cited from ICMR-NIN tables, not verified against the printed table.')
-usda('bread-white', 'Bread, white', ['bread', 'double roti', 'sandwich bread', 'pav'], 'bread_white', [P('1 slice', 25, true), P('2 slices', 50)], 'Indian sandwich bread slice ~ 25 g.')
-usda('bread-brown', 'Bread, brown / whole wheat', ['brown bread', 'atta bread', 'whole wheat bread'], 'bread_brown', [P('1 slice', 28, true), P('2 slices', 56)])
+usda('bread-white', 'Bread, white', ['bread', 'double roti', 'sandwich bread', 'pav'], 'bread_white', [P('1 slice', 25, true), P('2 slices', 50)], 'Indian sandwich bread slice ~ 25 g. Added sugar estimated from USDA total sugars.')
+usda('bread-brown', 'Bread, brown / whole wheat', ['brown bread', 'atta bread', 'whole wheat bread'], 'bread_brown', [P('1 slice', 28, true), P('2 slices', 56)], 'Added sugar estimated from USDA total sugars.')
 usda('pasta-cooked', 'Pasta, cooked', ['pasta', 'macaroni', 'spaghetti'], 'pasta_cooked', [P('1 cup', 140, true), P('1 plate', 250)])
 
 // Pulses (dry) and boiled
@@ -415,9 +451,12 @@ usda('sugar', 'Sugar', ['cheeni', 'shakkar', 'sugar'], 'sugar', [P('1 tsp', 5, t
 single('jaggery', 'Jaggery (gur)', ['gur', 'gud', 'jaggery', 'bellam', 'vellam'], 'jaggery', [P('1 small piece', 10, true)], 'estimate',
   EST_SRC('TrackFit estimate (typical cane jaggery)'), 'Not in USDA; nearly all sugar.')
 usda('honey', 'Honey', ['shahad', 'madhu', 'honey'], 'honey', [P('1 tsp', 7, true), P('1 tbsp', 21)])
-usda('ketchup', 'Tomato ketchup', ['ketchup', 'tomato sauce'], 'ketchup', [P('1 tbsp', 15, true)])
+usda('ketchup', 'Tomato ketchup', ['ketchup', 'tomato sauce'], 'ketchup', [P('1 tbsp', 15, true)], 'Added sugar = USDA total sugars minus tomato sugars (estimate).')
 usda('mayonnaise', 'Mayonnaise', ['mayo', 'mayonnaise'], 'mayo', [P('1 tbsp', 14, true)])
 usda('dark-chocolate', 'Dark chocolate (70-85%)', ['dark chocolate', 'chocolate'], 'dark_choc', [P('2 squares', 20, true)])
+usda('cola', 'Cola (soft drink)', ['coke', 'pepsi', 'thums up', 'cold drink', 'soft drink', 'cola'], 'cola', [P('1 can (330 ml)', 340, true), P('1 glass', 250), P('600 ml bottle', 620)], 'All sugar is added. Diet/zero versions: ~0 kcal.')
+usda('lemon-lime-soda', 'Lemon-lime soda (Sprite-type)', ['sprite', '7up', 'limca', 'cold drink', 'soda'], 'lemon_soda', [P('1 can (330 ml)', 340, true), P('1 glass', 250)])
+usda('fruit-drink-packaged', 'Fruit drink, packaged (sweetened)', ['frooti', 'maaza', 'juice', 'packaged juice', 'mango drink', 'fruit drink', 'tetra pack juice'], 'juice_drink', [P('1 glass', 250, true), P('1 small pack (200 ml)', 200)], 'USDA orange juice drink; Indian mango drinks are similar or sweeter. Added sugar estimated at 11 g/100 g.')
 
 // ===========================================================================
 // 5. INDIAN HOME — standard recipes. Oil = moderate home amount, stated in notes.
@@ -427,7 +466,7 @@ const DAL_PORTIONS = [KATORI(), P('1 small katori', 100), BOWL]
 const TADKA = (oil = 15) => [['onion', 40], ['tomato', 60], ['ghee', oil]]
 
 // --- Dals and curries of pulses (100 g dry pulse -> ~500 g medium-consistency dal)
-recipe({ id: 'toor-dal-cooked', name: 'Toor dal, cooked', aliases: ['arhar dal', 'tuvar dal', 'dal', 'daal', 'dal tadka', 'pappu', 'yellow dal'],
+recipe({ id: 'toor-dal-cooked', name: 'Toor dal, cooked', aliases: ['arhar dal', 'tuvar dal', 'dal', 'daal', 'dhal', 'dal tadka', 'pappu', 'yellow dal', 'dal bowl', '1 bowl dal', 'bowl of dal', 'dal katori'],
   ing: [['toor', 100], ...TADKA()], cooked: 500, portions: DAL_PORTIONS, notes: 'Medium consistency; tadka with 1 tsp ghee per katori. Thicker dal has more per katori.' })
 recipe({ id: 'moong-dal-cooked', name: 'Moong dal, cooked', aliases: ['yellow moong dal', 'dhuli moong', 'dal', 'daal', 'pesara pappu'],
   ing: [['moong', 100], ...TADKA()], cooked: 500, portions: DAL_PORTIONS, notes: 'Split yellow moong, medium consistency, 1 tsp ghee per katori.' })
@@ -536,6 +575,8 @@ recipe({ id: 'mushroom-matar', name: 'Mushroom matar', aliases: ['mushroom masal
   ing: [['mushroom', 250], ['peas', 100], ['onion', 60], ['tomato', 100], ['oil', 20]], cooked: 480, portions: [KATORI(), BOWL], notes: '~1 tsp oil per katori.' })
 recipe({ id: 'soya-chunks-curry', name: 'Soya chunks curry', aliases: ['soya chunks', 'soya badi curry', 'nutrela curry', 'meal maker curry'],
   ing: [['soya_chunks', 60], ['onion', 60], ['tomato', 100], ['potato', 60], ['oil', 15]], cooked: 450, portions: [KATORI(), BOWL], notes: '60 g dry chunks; ~1 tsp oil per katori.' })
+recipe({ id: 'soya-chaap-curry-home', name: 'Soya chaap curry (home)', aliases: ['soya chaap curry', 'chaap curry', 'soya chaap masala home', 'chaap sabzi'],
+  ing: [['chaap', 300], ['onion', 100], ['tomato', 150], ['oil', 15]], cooked: 560, portions: [KATORI(), P('1 plate (~6 sticks with gravy)', 560)], notes: 'Home gravy, 6 sticks per pot, ~1 tsp oil per katori. Chaap modelled as 1:1 soy flour : maida.' })
 recipe({ id: 'chana-sprouts-sabzi', name: 'Sprouts sabzi (moong)', aliases: ['sprouts usal', 'moong usal', 'sprouts curry'],
   ing: [['moong_sprouts', 300], ['onion', 40], ['tomato', 40], ['oil', 10]], cooked: 320, portions: SABZI_PORTIONS, notes: '~1/2 tsp oil per katori.' })
 
@@ -810,11 +851,24 @@ R({ id: 'veg-hakka-noodles', name: 'Veg hakka noodles', aliases: ['hakka noodles
 R({ id: 'chicken-hakka-noodles', name: 'Chicken hakka noodles', aliases: ['chicken chowmein', 'chicken noodles', 'noodles'],
   ing: [['egg_noodles', 100], ['chicken_breast', 80], ['cabbage', 50], ['carrot', 20], ['onion', 30], ['oil', 25], ['soy_sauce', 10]], cooked: 450, portions: [RPLATE(300)] })
 R({ id: 'veg-manchurian', name: 'Veg manchurian (gravy)', aliases: ['manchurian', 'veg manchurian', 'gobi manchurian'],
-  ing: [['cabbage', 150], ['carrot', 50], ['maida', 30], ['cornstarch', 20], ['oil', 40], ['soy_sauce', 15], ['onion', 30]], cooked: 420, portions: [P('1 bowl', 200, true)], notes: 'Deep-fried balls in sauce.' })
+  ing: [['cabbage', 150], ['carrot', 50], ['maida', 30], ['cornstarch', 20], ['oil', 40], ['soy_sauce', 15], ['ketchup', 15], ['sugar', 5], ['onion', 30]], cooked: 420, portions: [P('1 bowl', 200, true)], notes: 'Deep-fried balls in sauce.' })
 R({ id: 'chilli-chicken', name: 'Chilli chicken (dry)', aliases: ['chilli chicken', 'chili chicken', 'dragon chicken'],
   ing: [['chicken_thigh', 300], ['cornstarch', 30], ['maida', 15], ['oil', 40], ['capsicum', 60], ['onion', 60], ['soy_sauce', 15]], cooked: 430, portions: [RPLATE(200)], notes: 'Batter-fried then tossed.' })
 R({ id: 'chilli-paneer', name: 'Chilli paneer (dry)', aliases: ['chilli paneer', 'chili paneer', 'paneer chilli'],
   ing: [['paneer', 200], ['cornstarch', 25], ['oil', 30], ['capsicum', 60], ['onion', 60], ['soy_sauce', 15]], cooked: 360, portions: [RPLATE(200)] })
+
+// Soya chaap (street / restaurant). Base: 6 boiled sticks (300 g) of 1:1 soy flour : maida chaap.
+const CHAAP_P = (plate) => [P('1 stick', 50, true), P('1 plate (~6 sticks)', plate)]
+R({ id: 'tandoori-soya-chaap', name: 'Tandoori soya chaap', aliases: ['tandoori chaap', 'soya chaap tikka', 'tandoori soya chap', 'chaap', 'soya chaap'],
+  ing: [['chaap', 300], ['curd', 60], ['oil', 15], ['butter', 10]], cooked: 340, portions: CHAAP_P(340), notes: 'Curd-spice marinade, tandoor, basted with ~1 tbsp oil + 2 tsp butter per plate.' })
+R({ id: 'malai-soya-chaap', name: 'Malai soya chaap', aliases: ['malai chaap', 'cream chaap', 'malai soya chap', 'chaap', 'soya chaap'],
+  ing: [['chaap', 300], ['cream', 50], ['curd', 30], ['cashew', 15], ['cheese', 15], ['butter', 15]], cooked: 390, portions: CHAAP_P(390), notes: 'Cream, cashew, cheese and butter marinade (~50 g cream per plate).' })
+R({ id: 'afghani-soya-chaap', name: 'Afghani soya chaap', aliases: ['afghani chaap', 'afghani soya chap', 'chaap', 'soya chaap'],
+  ing: [['chaap', 300], ['cream', 40], ['curd', 50], ['cashew', 15], ['butter', 10]], cooked: 385, portions: CHAAP_P(385), notes: 'Creamy cashew-curd marinade; ~40 g cream + 2 tsp butter per plate.' })
+R({ id: 'masala-soya-chaap', name: 'Masala soya chaap (gravy)', aliases: ['soya chaap masala', 'chaap masala', 'gravy chaap', 'butter chaap', 'chaap curry', 'soya chaap'],
+  ing: [['chaap', 300], ['onion', 120], ['tomato', 150], ['oil', 35], ['butter', 10], ['cream', 15]], cooked: 560, portions: [P('1 stick with gravy', 90, true), P('1 plate (~6 sticks with gravy)', 560), P('1 bowl', 250)], notes: 'Oily restaurant gravy: ~2.5 tbsp oil + butter + cream per 6-stick plate.' })
+R({ id: 'achari-soya-chaap', name: 'Achari soya chaap', aliases: ['achari chaap', 'achari soya chap', 'chaap', 'soya chaap'],
+  ing: [['chaap', 300], ['curd', 60], ['mustard_oil', 25]], cooked: 345, portions: CHAAP_P(345), notes: 'Pickle-spice curd marinade with ~2 tbsp mustard oil per plate, tandoor.' })
 R({ id: 'veg-momos-steamed', name: 'Veg momos (steamed)', aliases: ['momos', 'momo', 'veg momos', 'dumplings'],
   ing: [['maida', 100], ['cabbage', 100], ['carrot', 30], ['onion', 30], ['oil', 8]], cooked: 300, portions: [P('6 pieces', 150, true), P('1 piece', 25)], notes: 'Steamed.' })
 R({ id: 'chicken-momos-steamed', name: 'Chicken momos (steamed)', aliases: ['chicken momos', 'momos', 'momo'],

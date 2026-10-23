@@ -84,7 +84,11 @@ function rank(t: Form, q: Form): number | null {
 // Raw, dry and flour forms are ingredients, not what you ate: rank them after the cooked food ("rice" → cooked rice first)
 const ingredientOnly = (f: Food) => (/\b(raw|dry|flour|powder)\b/i.test(f.name) ? 1 : 0)
 
-export function searchFoods(index: FoodIndex, query: string, usage: Record<string, number> = {}, limit = 8): Food[] {
+export const searchFoods = (index: FoodIndex, query: string, usage: Record<string, number> = {}, limit = 8): Food[] =>
+  searchRanked(index, query, usage, limit).map((h) => h.food)
+
+// With each hit's rank (0 exact … 4 typo; +0.5 when only an alias matched), e.g. to tell a good match from a weak one
+export function searchRanked(index: FoodIndex, query: string, usage: Record<string, number> = {}, limit = 8): { food: Food; score: number }[] {
   if (!normalize(query)) return []
   const q = forms(query)
   const hits: { food: Food; score: number }[] = []
@@ -105,7 +109,6 @@ export function searchFoods(index: FoodIndex, query: string, usage: Record<strin
       || a.food.name.length - b.food.name.length
       || a.food.name.localeCompare(b.food.name))
     .slice(0, limit)
-    .map((h) => h.food)
 }
 
 // How often each food was logged, weighted so recent days count more (a log today ≈ 1, a month ago ≈ 0.4)
