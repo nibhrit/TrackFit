@@ -6,7 +6,7 @@
 // Prints mean absolute % error per nutrient per model, how many answers passed the sanity check, tokens and $ cost.
 //
 // Run (from this folder, in your own terminal; the key is read from the environment and never printed):
-//   npm install --no-save @anthropic-ai/sdk@1.1.0
+//   npm install --no-save @anthropic-ai/sdk@0.132.1
 //   ANTHROPIC_API_KEY=... node --experimental-strip-types eval.mjs            # all three models, 30 foods
 //   node --experimental-strip-types eval.mjs --n=10 --models=claude-haiku-5-5  # quicker / cheaper
 //   node --experimental-strip-types eval.mjs --models=claude-sonnet-5-5 --effort=low  # effort sweep for the app's model

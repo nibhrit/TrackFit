@@ -12,7 +12,7 @@
 // Secrets: ANTHROPIC_API_KEY (required), FOOD_MODEL (default claude-sonnet-5-5), FOOD_DAILY_CAP (default 25).
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase automatically.
 
-import Anthropic from 'npm:@anthropic-ai/sdk@1.1.0'
+import Anthropic from 'npm:@anthropic-ai/sdk@0.132.1'
 import { createClient } from 'npm:@supabase/supabase-js@2.118.0'
 import { DEFAULT_MODEL, MAX_QUERY, checkEstimate, normalizeQuery, parseResponse, requestFor } from './shared.ts'
 

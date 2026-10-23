@@ -74,7 +74,7 @@ Runs ~30 measured/calculated foods from `app/src/data/foods/foods.json` (half In
 
 ```bash
 cd supabase/functions/estimate-food
-npm install --no-save @anthropic-ai/sdk@1.1.0
+npm install --no-save @anthropic-ai/sdk@0.132.1
 ANTHROPIC_API_KEY=sk-ant-... node --experimental-strip-types eval.mjs
 # options: --n=10   --models=claude-sonnet-5-5,claude-haiku-5-5   --effort=low|medium|high
 ```
