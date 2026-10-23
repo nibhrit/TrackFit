@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { addStarterFoods, logProtein, useStore } from '../data/store'
+import { addStarterFoods, logQuickAdd, useStore } from '../data/store'
 import { STARTER_FOODS } from '../data/types'
 
-// One-tap protein logging. On an empty list, offers a starter set of common foods.
+// One-tap food logging (protein, and calories when the saved food has them).
+// On an empty list, offers a starter set of common foods.
 export default function QuickAdds({ offerStarters = false }: { offerStarters?: boolean }) {
   const { quickAdds, loaded } = useStore()
   const [busy, setBusy] = useState(false)
@@ -14,7 +15,7 @@ export default function QuickAdds({ offerStarters = false }: { offerStarters?: b
       <div className="card form">
         <b>Save foods you eat often</b>
         <p className="cap" style={{ margin: 0 }}>
-          Adds {STARTER_FOODS.length} common foods as one-tap buttons, like a whey scoop (24 g) and 3 eggs (18 g).
+          Adds {STARTER_FOODS.length} common foods as one-tap buttons, like a whey scoop (24 g protein, 120 kcal) and 3 eggs (18 g, 215 kcal).
           Values are approximate. Edit them under Saved foods.
         </p>
         {error && <p className="err" role="alert">{error}</p>}
@@ -26,9 +27,9 @@ export default function QuickAdds({ offerStarters = false }: { offerStarters?: b
   }
 
   return (
-    <div className="chips scroll" role="group" aria-label="Quick add protein">
+    <div className="chips scroll" role="group" aria-label="Quick add food">
       {quickAdds.map((q) => (
-        <button key={q.id} className="chip food" onClick={() => logProtein(q.grams, q.name, q.id)}>
+        <button key={q.id} className="chip food" onClick={() => logQuickAdd(q)}>
           + {q.name} <b>{q.grams} g</b>
         </button>
       ))}

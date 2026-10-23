@@ -25,19 +25,33 @@ export type Session = {
   sets: LiftSet[]
 }
 
-export type ProteinEntry = {
+// What a food entry or saved food contributes. grams = protein grams (the column predates calories).
+// kcal/carbs/fat are null for entries logged as protein only (before TF-36, or typed without calories).
+export type Nutrients = { grams: number; kcal: number | null; carbs_g: number | null; fat_g: number | null }
+
+// Where it came from: a dataset food and how much of it. All null for typed entries.
+// portion_label is the dataset's household measure ('1 katori'); null when weighed in grams.
+export type FoodRef = {
+  food_id: string | null
+  portion_label: string | null
+  portion_qty: number | null
+  portion_grams: number | null   // total grams eaten
+}
+
+export type ProteinEntry = Nutrients & FoodRef & {
   id: string
-  grams: number
   label: string | null
   quick_add_id: string | null
   logged_at: string
   local_date: string
 }
 
-export type QuickAdd = { id: string; name: string; grams: number; sort_order: number }
+export type QuickAdd = Nutrients & FoodRef & { id: string; name: string; sort_order: number }
 export type ProteinGoal = { goal_g: number; effective_from: string }
+export type CalorieGoal = { goal_kcal: number; effective_from: string }
 
 export const DEFAULT_GOAL = 100
+export const NO_FOOD: FoodRef = { food_id: null, portion_label: null, portion_qty: null, portion_grams: null }
 
 export type HabitResult = 'avoided' | 'had'
 export type HabitKey = 'sugar' | 'junk_food'
@@ -56,14 +70,14 @@ export const CARDIO_KINDS: [CardioKind, string][] = [
 export const cardioName = (k: CardioKind) => CARDIO_KINDS.find(([id]) => id === k)?.[1] ?? 'Cardio'
 
 // Offered once on an empty list; approximate values, editable
-export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams'>[] = [
-  { name: 'Whey scoop', grams: 24 },
-  { name: '3 eggs', grams: 18 },
-  { name: 'Chicken breast 100 g', grams: 31 },
-  { name: 'Paneer 100 g', grams: 18 },
-  { name: 'Soya chunks 50 g', grams: 26 },
-  { name: 'Greek yogurt cup', grams: 10 },
-  { name: 'Dal, 1 bowl', grams: 9 },
+export const STARTER_FOODS: Pick<QuickAdd, 'name' | 'grams' | 'kcal'>[] = [
+  { name: 'Whey scoop', grams: 24, kcal: 120 },
+  { name: '3 eggs', grams: 18, kcal: 215 },
+  { name: 'Chicken breast 100 g', grams: 31, kcal: 165 },
+  { name: 'Paneer 100 g', grams: 18, kcal: 265 },
+  { name: 'Soya chunks 50 g', grams: 26, kcal: 170 },
+  { name: 'Greek yogurt cup', grams: 10, kcal: 100 },
+  { name: 'Dal, 1 bowl', grams: 9, kcal: 150 },
 ]
 
 // Smallest common plate / dumbbell jump

@@ -148,6 +148,17 @@ Priorities: **P0** = must-have for launch · **P1** = should-have for launch · 
 
 Note: v1 excluded calories *eaten*. Calories *burnt* is new v1.1 scope.
 
+## 6.7 v2: Food database and calories eaten (epic TF-36)
+
+| ID | Requirement | Priority | Jira |
+|---|---|---|---|
+| F1 | Curated food list (319 foods: Indian home cooking, basic ingredients, restaurant), per 100 g as eaten, household portions, source + confidence per food. Method: [FOOD_DATA.md](FOOD_DATA.md) | P0 | TF-37 |
+| F2 | Offline search over names + Hindi/regional aliases, typo-tolerant, recent foods first; portion picker (household unit × quantity, or grams) showing protein + kcal before logging | P0 | TF-22 |
+| F3 | Calorie target (history like the protein goal); calories eaten on Today and Food; Week shows eaten vs target vs burnt | P0 | TF-21 |
+| F4 | Packaged / branded foods via Open Food Facts (ODbL), kept separate from the curated list | P1 | TF-38 |
+
+Nutrients are copied onto each entry when logged, so later data corrections don't rewrite past days.
+
 ## 7. Key user flows
 
 **Flow A: At the gym (P1)**

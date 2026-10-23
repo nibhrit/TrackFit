@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from 'react'
 import { supabase } from '../lib/supabase'
 import {
-  DEFAULT_GOAL, STARTERS, STARTER_FOODS,
-  type BodyWeight, type Cardio, type DayHabits, type Exercise, type HabitKey, type HabitResult, type LiftSet,
-  type MuscleGroup, type ProteinEntry, type ProteinGoal, type QuickAdd,
+  DEFAULT_GOAL, NO_FOOD, STARTERS, STARTER_FOODS,
+  type BodyWeight, type Cardio, type CalorieGoal, type DayHabits, type Exercise, type FoodRef, type HabitKey, type HabitResult,
+  type LiftSet, type MuscleGroup, type Nutrients, type ProteinEntry, type ProteinGoal, type QuickAdd,
   type Session, type Settings, type Splits, type Unit,
 } from './types'
 import type { CardioKind, Effort } from './types'
@@ -13,7 +13,7 @@ import { DEFAULT_BODY_KG, cardioKcal, liftKcal } from '../lib/calories'
 // One shared store for the signed-in user's data.
 // Reads show the last known data instantly (cached on the device), then refresh from Supabase.
 // Writes update the screen first, then save; if saving fails, the change is rolled back.
-// Lift sessions and protein entries are different: they go into an outbox on the device first and are sent when
+// Lift sessions and food entries are different: they go into an outbox on the device first and are sent when
 // there's a connection, so logging works with no signal (see "Outbox" below).
 
 type State = {
@@ -22,9 +22,10 @@ type State = {
   settings: Settings
   splits: Splits
   sessions: Session[]   // newest first
-  protein: ProteinEntry[]
+  protein: ProteinEntry[]   // the food log: every entry counts toward protein, and toward calories when it has them
   quickAdds: QuickAdd[]
   goals: ProteinGoal[]
+  kcalGoals: CalorieGoal[]  // calorie target history; empty until one is set
   habits: Record<string, DayHabits>   // by date
   weights: BodyWeight[]               // oldest first
   cardio: Cardio[]                    // oldest first
@@ -40,6 +41,7 @@ type Op =
   | { kind: 'weight_save'; entry: BodyWeight }
   | { kind: 'weight_delete'; date: string }
   | { kind: 'goal_save'; goal: ProteinGoal }
+  | { kind: 'kcal_goal_save'; goal: CalorieGoal }
   | { kind: 'split_save'; date: string; groups: MuscleGroup[] }
   | { kind: 'settings_save'; settings: Settings }
   | { kind: 'cardio_save'; entry: Cardio }
@@ -49,7 +51,7 @@ type Toast = { id: number; message: string; undo?: () => void }
 
 const EMPTY: State = {
   loaded: false, exercises: [], settings: { body_weight_unit: 'kg' }, splits: {}, sessions: [],
-  protein: [], quickAdds: [], goals: [], habits: {}, weights: [], cardio: [], pending: 0,
+  protein: [], quickAdds: [], goals: [], kcalGoals: [], habits: {}, weights: [], cardio: [], pending: 0,
 }
 
 let state: State = EMPTY
@@ -99,7 +101,7 @@ export async function loadForUser(id: string) {
   }
   await flushOutbox()
   const today = localDate()
-  const [ex, st, sp, ss, pe, qa, pg, hb, bw, cd] = await Promise.all([
+  const [ex, st, sp, ss, pe, qa, pg, kg, hb, bw, cd] = await Promise.all([
     supabase.from('exercises').select('id,name,muscle_group,default_unit,archived_at,created_at').is('archived_at', null).order('name'),
     supabase.from('user_settings').select('body_weight_unit').maybeSingle(),
     fetchSplits(addDays(today, -42), addDays(today, 42)),
@@ -107,16 +109,17 @@ export async function loadForUser(id: string) {
       .select('id,exercise_id,performed_at,local_date,lift_sets(set_number,weight,unit)')
       .gte('local_date', addDays(today, -365))
       .order('performed_at', { ascending: false }),
-    supabase.from('protein_entries').select('id,grams,label,quick_add_id,logged_at,local_date')
+    supabase.from('protein_entries').select(`id,label,quick_add_id,logged_at,local_date,${FOOD_COLS}`)
       .gte('local_date', addDays(today, -40)).order('logged_at'),
-    supabase.from('quick_adds').select('id,name,grams,sort_order').order('sort_order').order('name'),
+    supabase.from('quick_adds').select(QUICK_COLS).order('sort_order').order('name'),
     supabase.from('protein_goals').select('goal_g,effective_from').order('effective_from'),
+    supabase.from('calorie_goals').select('goal_kcal,effective_from').order('effective_from'),
     supabase.from('daily_habits').select('date,sugar,junk_food').gte('date', addDays(today, -100)),
     supabase.from('body_weights').select('date,weight,unit').gte('date', addDays(today, -400)).order('date'),
     supabase.from('cardio_sessions').select('id,kind,minutes,effort,performed_at,local_date')
       .gte('local_date', addDays(today, -120)).order('performed_at'),
   ])
-  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error || hb.error || bw.error || cd.error) {
+  if (ex.error || st.error || !sp || ss.error || pe.error || qa.error || pg.error || kg.error || hb.error || bw.error || cd.error) {
     if (!state.loaded) showToast('Couldn’t load your data. Showing what’s saved on this device.')
     return
   }
@@ -131,9 +134,10 @@ export async function loadForUser(id: string) {
     settings: applySettingsOutbox((st.data as Settings) ?? state.settings),
     splits: applySplitOutbox(sp),
     sessions: applyLiftOutbox(sessions), // keep unsynced changes on top of what the server has
-    protein: applyProteinOutbox(pe.data as ProteinEntry[]),
-    quickAdds: qa.data as QuickAdd[],
+    protein: applyProteinOutbox((pe.data as ProteinEntry[]).map(numericPortion)),
+    quickAdds: (qa.data as QuickAdd[]).map(numericPortion),
     goals: applyGoalOutbox(pg.data as ProteinGoal[]),
+    kcalGoals: applyKcalGoalOutbox(kg.data as CalorieGoal[]),
     habits: applyHabitOutbox(Object.fromEntries((hb.data as DayHabits[]).map((d) => [d.date, d]))),
     weights: applyWeightOutbox((bw.data as BodyWeight[]).map((w) => ({ ...w, weight: Number(w.weight) }))),
     cardio: applyCardioOutbox(cd.data as Cardio[]),
@@ -303,6 +307,7 @@ function opKey(op: Op) {
     case 'weight_save': return `weight:${op.entry.date}`
     case 'weight_delete': return `weight:${op.date}`
     case 'goal_save': return `goal:${op.goal.effective_from}`
+    case 'kcal_goal_save': return `kcal_goal:${op.goal.effective_from}`
     case 'split_save': return `split:${op.date}`
     case 'settings_save': return 'settings'
     case 'cardio_save': return `cardio:${op.entry.id}`
@@ -318,6 +323,10 @@ function applyCardioOutbox(list: Cardio[]) {
 
 function applyGoalOutbox(goals: ProteinGoal[]) {
   return outbox.reduce((list, op) => (op.kind === 'goal_save' ? upsertGoal(list, op.goal) : list), goals)
+}
+
+function applyKcalGoalOutbox(goals: CalorieGoal[]) {
+  return outbox.reduce((list, op) => (op.kind === 'kcal_goal_save' ? upsertKcalGoal(list, op.goal) : list), goals)
 }
 
 function applySplitOutbox(splits: Splits) {
@@ -374,6 +383,8 @@ function send(op: Op) {
       return supabase.from('body_weights').delete().eq('date', op.date)
     case 'goal_save':
       return supabase.from('protein_goals').upsert(op.goal, { onConflict: 'user_id,effective_from' })
+    case 'kcal_goal_save':
+      return supabase.from('calorie_goals').upsert(op.goal, { onConflict: 'user_id,effective_from' })
     case 'split_save':
       return supabase.from('daily_splits').upsert({ date: op.date, groups: op.groups, updated_at: new Date().toISOString() }, { onConflict: 'user_id,date' })
     case 'cardio_save':
@@ -410,7 +421,19 @@ if (typeof window !== 'undefined') {
   setInterval(() => flushOutbox(), 20_000)
 }
 
-// ---------- Protein ----------
+// ---------- Food log (protein + calories) ----------
+// Entries live in protein_entries: protein grams always, calories/carbs/fat and the food + portion when known.
+// Ops keep their 'protein_*' names so changes already queued on a phone still sync after an update.
+
+const FOOD_COLS = 'grams,kcal,carbs_g,fat_g,food_id,portion_label,portion_qty,portion_grams'
+const QUICK_COLS = `id,name,sort_order,${FOOD_COLS}`
+
+// Postgres numeric columns can arrive as strings
+const numericPortion = <T extends FoodRef>(r: T): T => ({
+  ...r,
+  portion_qty: r.portion_qty == null ? null : Number(r.portion_qty),
+  portion_grams: r.portion_grams == null ? null : Number(r.portion_grams),
+})
 
 const byTime = (list: ProteinEntry[]) => [...list].sort((a, b) => a.logged_at.localeCompare(b.logged_at))
 const upsertEntry = (list: ProteinEntry[], e: ProteinEntry) => byTime([...list.filter((x) => x.id !== e.id), e])
@@ -418,29 +441,58 @@ const upsertEntry = (list: ProteinEntry[], e: ProteinEntry) => byTime([...list.f
 export const proteinOn = (s: State, date: string) => s.protein.filter((e) => e.local_date === date)
 export const proteinTotal = (s: State, date: string) => proteinOn(s, date).reduce((sum, e) => sum + e.grams, 0)
 
+// Calories eaten on a date. Entries logged as protein only have no calories: counted in `missing`, not guessed.
+export function kcalEatenOn(s: State, date: string) {
+  const day = proteinOn(s, date)
+  return {
+    total: day.reduce((sum, e) => sum + (e.kcal ?? 0), 0),
+    missing: day.filter((e) => e.kcal == null).length,
+  }
+}
+
 // The goal in force on a date: the latest one set on or before it
 export function goalFor(s: State, date: string): number {
   const g = [...s.goals].reverse().find((x) => x.effective_from <= date)
   return g?.goal_g ?? DEFAULT_GOAL
 }
 
-export function logProtein(grams: number, label: string | null, quick_add_id: string | null = null) {
+// Same for the calorie target, but there is no default: null until the user sets one
+export function kcalGoalFor(s: State, date: string): number | null {
+  return [...s.kcalGoals].reverse().find((x) => x.effective_from <= date)?.goal_kcal ?? null
+}
+
+export type NewEntry = Nutrients & FoodRef & { label: string | null; quick_add_id?: string | null }
+
+export function logFood(input: NewEntry) {
   const entry: ProteinEntry = {
-    id: crypto.randomUUID(), grams, label: label?.trim() || null, quick_add_id,
-    logged_at: new Date().toISOString(), local_date: localDate(),
+    ...NO_FOOD, quick_add_id: null, ...input, label: input.label?.trim() || null,
+    id: crypto.randomUUID(), logged_at: new Date().toISOString(), local_date: localDate(),
   }
   set({ protein: upsertEntry(state.protein, entry) })
   enqueue({ kind: 'protein_save', entry })
-  showToast(`Logged ${grams} g${entry.label ? ` · ${entry.label}` : ''}`, () => {
+  const kcal = entry.kcal != null ? ` · ${entry.kcal} kcal` : ''
+  showToast(`Logged ${entry.grams} g${kcal}${entry.label ? ` · ${entry.label}` : ''}`, () => {
     set({ protein: state.protein.filter((x) => x.id !== entry.id) })
     enqueue({ kind: 'protein_delete', id: entry.id })
   })
 }
 
-export function updateProtein(id: string, grams: number, label: string | null) {
+// Typed protein only (no calories)
+export const logProtein = (grams: number, label: string | null) =>
+  logFood({ grams, kcal: null, carbs_g: null, fat_g: null, ...NO_FOOD, label })
+
+export const logQuickAdd = (q: QuickAdd) =>
+  logFood({
+    grams: q.grams, kcal: q.kcal, carbs_g: q.carbs_g, fat_g: q.fat_g, food_id: q.food_id,
+    portion_label: q.portion_label, portion_qty: q.portion_qty, portion_grams: q.portion_grams,
+    label: q.name, quick_add_id: q.id,
+  })
+
+export function updateEntry(id: string, patch: Partial<NewEntry>) {
   const e = state.protein.find((x) => x.id === id)
   if (!e) return
-  const entry = { ...e, grams, label: label?.trim() || null }
+  const entry = { ...e, ...patch }
+  if ('label' in patch) entry.label = patch.label?.trim() || null
   set({ protein: upsertEntry(state.protein, entry) })
   enqueue({ kind: 'protein_save', entry })
 }
@@ -450,7 +502,7 @@ export function deleteProtein(id: string) {
   if (!e) return
   set({ protein: state.protein.filter((x) => x.id !== id) })
   enqueue({ kind: 'protein_delete', id })
-  showToast(`Deleted ${e.grams} g`, () => {
+  showToast(`Deleted ${e.label ?? `${e.grams} g`}`, () => {
     set({ protein: upsertEntry(state.protein, e) })
     enqueue({ kind: 'protein_save', entry: e })
   })
@@ -468,26 +520,55 @@ export function setGoal(goal_g: number): string | null {
 const upsertGoal = (list: ProteinGoal[], g: ProteinGoal) =>
   [...list.filter((x) => x.effective_from !== g.effective_from), g].sort((a, b) => a.effective_from.localeCompare(b.effective_from))
 
-// Quick-adds: saved foods. Changed rarely, so saved directly (with rollback) rather than via the outbox.
-const validFood = (name: string, grams: number) =>
-  !name.trim() ? 'Enter a name.' : !Number.isInteger(grams) || grams < 1 || grams > 300 ? 'Enter grams between 1 and 300.' : null
+export const KCAL_GOAL_MIN = 800
+export const KCAL_GOAL_MAX = 6000
 
-export async function addQuickAdd(name: string, grams: number): Promise<string | null> {
-  const bad = validFood(name, grams)
-  if (bad) return bad
-  const sort_order = (state.quickAdds[state.quickAdds.length - 1]?.sort_order ?? 0) + 1
-  const { data, error } = await supabase.from('quick_adds').insert({ name: name.trim(), grams, sort_order }).select('id,name,grams,sort_order').single()
-  if (error) return 'Couldn’t save. Check your connection.'
-  set({ quickAdds: [...state.quickAdds, data as QuickAdd] })
+// Applies from today onward, like the protein goal
+export function setKcalGoal(goal_kcal: number): string | null {
+  if (!Number.isInteger(goal_kcal) || goal_kcal < KCAL_GOAL_MIN || goal_kcal > KCAL_GOAL_MAX) {
+    return `Enter a target between ${KCAL_GOAL_MIN} and ${KCAL_GOAL_MAX} kcal.`
+  }
+  const goal = { goal_kcal, effective_from: localDate() }
+  set({ kcalGoals: upsertKcalGoal(state.kcalGoals, goal) })
+  enqueue({ kind: 'kcal_goal_save', goal })
   return null
 }
 
-export async function updateQuickAdd(id: string, name: string, grams: number): Promise<string | null> {
-  const bad = validFood(name, grams)
+const upsertKcalGoal = (list: CalorieGoal[], g: CalorieGoal) =>
+  [...list.filter((x) => x.effective_from !== g.effective_from), g].sort((a, b) => a.effective_from.localeCompare(b.effective_from))
+
+// Quick-adds: saved foods. Changed rarely, so saved directly (with rollback) rather than via the outbox.
+// kcal is optional (null = not known); a saved food needs protein or calories
+function validFood(name: string, grams: number, kcal: number | null) {
+  if (!name.trim()) return 'Enter a name.'
+  if (name.trim().length > 60) return 'Keep the name under 60 characters.'
+  if (!Number.isInteger(grams) || grams < 0 || grams > 300) return 'Enter protein grams between 0 and 300.'
+  if (kcal !== null && (!Number.isInteger(kcal) || kcal < 0 || kcal > 5000)) return 'Enter kcal between 0 and 5000, or leave it empty.'
+  if (grams === 0 && !kcal) return 'Enter protein grams or kcal.'
+  return null
+}
+
+// A typed saved food, or one made from a dataset food + portion (pass its nutrients and ref)
+export async function addQuickAdd(name: string, n: Nutrients, ref: FoodRef = NO_FOOD): Promise<string | null> {
+  const bad = validFood(name, n.grams, n.kcal)
   if (bad) return bad
+  const sort_order = (state.quickAdds[state.quickAdds.length - 1]?.sort_order ?? 0) + 1
+  const { data, error } = await supabase.from('quick_adds').insert({ name: name.trim(), ...n, ...ref, sort_order }).select(QUICK_COLS).single()
+  if (error) return 'Couldn’t save. Check your connection.'
+  set({ quickAdds: [...state.quickAdds, numericPortion(data as QuickAdd)] })
+  return null
+}
+
+export async function updateQuickAdd(id: string, name: string, grams: number, kcal: number | null): Promise<string | null> {
+  const bad = validFood(name, grams, kcal)
+  if (bad) return bad
+  const q = state.quickAdds.find((x) => x.id === id)
+  // Changing the numbers of a dataset food turns it into a typed one: its carbs, fat and portion no longer match
+  const changed = q && (q.grams !== grams || q.kcal !== kcal)
+  const patch = { name: name.trim(), grams, kcal, ...(changed ? { carbs_g: null, fat_g: null, ...NO_FOOD } : {}) }
   const before = state.quickAdds
-  set({ quickAdds: before.map((q) => (q.id === id ? { ...q, name: name.trim(), grams } : q)) })
-  const { error } = await supabase.from('quick_adds').update({ name: name.trim(), grams }).eq('id', id)
+  set({ quickAdds: before.map((x) => (x.id === id ? { ...x, ...patch } : x)) })
+  const { error } = await supabase.from('quick_adds').update(patch).eq('id', id)
   if (error) { set({ quickAdds: before }); return 'Couldn’t save. Check your connection.' }
   return null
 }
@@ -519,9 +600,9 @@ export async function addStarterFoods(): Promise<string | null> {
   const rows = STARTER_FOODS.filter((f) => !have.has(f.name.toLowerCase()))
     .map((f, k) => ({ ...f, sort_order: state.quickAdds.length + k + 1 }))
   if (!rows.length) return null
-  const { data, error } = await supabase.from('quick_adds').insert(rows).select('id,name,grams,sort_order')
+  const { data, error } = await supabase.from('quick_adds').insert(rows).select(QUICK_COLS)
   if (error) return 'Couldn’t add them. Check your connection.'
-  set({ quickAdds: [...state.quickAdds, ...(data as QuickAdd[])] })
+  set({ quickAdds: [...state.quickAdds, ...(data as QuickAdd[]).map(numericPortion)] })
   return null
 }
 
@@ -618,7 +699,7 @@ export function kcalOn(s: State, date: string) {
 
 // ---------- Insights ----------
 
-// A day counts as logged if anything was recorded: a lift, protein, a habit answer or body weight
+// A day counts as logged if anything was recorded: a lift, food, a habit answer, body weight or cardio
 export function loggedOn(s: State, date: string) {
   const h = s.habits[date]
   return s.sessions.some((x) => x.local_date === date)

@@ -261,3 +261,35 @@ nav.tabs { grid-template-columns: repeat(5, 1fr); }
 .bars.kcal { height: 96px; }
 .bars.kcal .bar { background: var(--ink); opacity: 0.75; }
 .bars.kcal .bar-hit:disabled { cursor: default; }
+
+/* Food log + calories (TF-36). Calories are graphite like calories burnt: blue, yellow and green are taken. */
+.search { height: 50px; width: 100%; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-size: 16px; padding: 0 14px; }
+.results { display: flex; flex-direction: column; margin: -4px 0 0; }
+.result { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 52px; padding: 8px 2px; border-top: 1px solid var(--line); text-align: left; width: 100%; }
+.result:first-child { border-top: 0; }
+.result .cap { text-align: right; white-space: nowrap; }
+.about { font-size: 11px; font-weight: 600; color: var(--steel); border: 1px solid var(--line); border-radius: 999px; padding: 1px 7px; white-space: nowrap; }
+.chip.portion { background: var(--chalk); }
+.chip.portion[aria-pressed='true'] { background: var(--ink); color: var(--card); font-weight: 600; }
+.qty-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.qty-row .weight { width: 3.6em; }
+.food-preview { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; }
+.food-preview .num { font-size: 28px; line-height: 1.1; }
+.row-nums { display: flex; flex-direction: column; align-items: flex-end; flex: 0 0 auto; }
+.row-nums .num { font-size: 15px; }
+.row-nums .num .cap { font-stretch: 100%; font-weight: 400; letter-spacing: 0; }
+.nums-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; }
+.form .nums-row input, .form .full { width: 100%; }
+.meter { display: block; height: 4px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--ink); border-radius: 2px; transition: width 0.5s ease; }
+@media (prefers-reduced-motion: reduce) { .meter > span { transition: none; } }
+.kcal-line { display: flex; flex-direction: column; gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; margin-top: 12px; }
+.tiles.food { grid-template-columns: 1.3fr 1.1fr 0.8fr; }
+.tile .meter { margin: 3px 0 1px; }
+.bars.kcal .bar-hit { gap: 2px; }
+.bars.kcal .bar.eaten { background: var(--ink); opacity: 1; }
+.bars.kcal .bar.burnt { background: transparent; border: 1.5px solid var(--ink); border-bottom: 0; opacity: 1; }
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.swatch.eaten { background: var(--ink); }
+.swatch.burnt { border: 1.5px solid var(--ink); }
+.food-name .cap { white-space: nowrap; }

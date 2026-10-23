@@ -79,3 +79,36 @@ await db.exec('set role anon'); try { await db.query('select * from cardio_sessi
 try { await as(A, `insert into protein_goals(goal_g,effective_from) values (5,'2026-10-16')`); bad('goal 5 allowed') } catch { ok('goal bounds enforced') }
 // anon gets nothing
 await db.exec('set role anon'); try { await db.query('select * from exercises'); bad('anon read') } catch { ok('anon cannot read') } finally { await db.exec('reset role') }
+// Food log (TF-36): protein_entries carry calories and the food + portion; calorie goals
+await as(A, `insert into protein_entries(grams,label,local_date) values (24,'Whey scoop','2026-10-23')`)
+ok('food: old-style protein entry (no calories) still saves')
+await as(A, `insert into protein_entries(grams,kcal,carbs_g,fat_g,label,food_id,portion_label,portion_qty,portion_grams,local_date)
+             values (6,240,40,6,'Roti','roti','1 roti',2,80,'2026-10-23')`)
+const fe=(await as(A,`select grams,kcal,food_id,portion_qty::text q,portion_grams::text g from protein_entries where food_id='roti'`)).rows[0]
+;(fe&&fe.kcal===240&&fe.q==='2.00'&&fe.g==='80.0')?ok('food: entry with kcal, food and portion saves'):bad(JSON.stringify(fe))
+await as(A, `insert into protein_entries(grams,kcal,label,local_date) values (0,95,'Apple','2026-10-23')`); ok('food: 0 g protein allowed when it has calories')
+try { await as(A, `insert into protein_entries(grams,local_date) values (0,'2026-10-23')`); bad('empty entry saved') } catch { ok('food: entry with no protein and no calories refused') }
+try { await as(A, `insert into protein_entries(grams,kcal,local_date) values (5,-1,'2026-10-23')`); bad('negative kcal') } catch { ok('food: negative kcal refused') }
+try { await as(A, `insert into protein_entries(grams,kcal,local_date) values (5,9000,'2026-10-23')`); bad('9000 kcal') } catch { ok('food: kcal capped at 5000 per entry') }
+try { await as(A, `insert into protein_entries(grams,food_id,local_date) values (5,'roti','2026-10-23')`); bad('food without amount') } catch { ok('food: dataset food needs portion grams') }
+try { await as(A, `insert into protein_entries(grams,portion_label,portion_grams,local_date) values (5,'1 roti',40,'2026-10-23')`); bad('portion without qty') } catch { ok('food: portion label needs a quantity') }
+try { await as(A, `insert into protein_entries(grams,food_id,portion_grams,local_date) values (5,'Bad Id!',40,'2026-10-23')`); bad('bad food id') } catch { ok('food: malformed food id refused') }
+await as(A, `insert into protein_entries(grams,kcal,food_id,portion_grams,local_date) values (1,30,'off:3017620422003',15,'2026-10-23')`); ok('food: prefixed id (future Open Food Facts) accepted')
+const feB=(await as(B,`select count(*)::int c from protein_entries`)).rows[0].c; feB===0?ok('food: B sees 0 of A\'s entries'):bad('B sees A food')
+const feU=await as(B,`update protein_entries set kcal=1 returning id`); feU.rows.length===0?ok('food: B update of A\'s entries touches 0 rows'):bad('B updated A food')
+// quick-adds pointing at a dataset food
+await as(A, `insert into quick_adds(name,grams,kcal,food_id,portion_label,portion_qty,portion_grams) values ('2 rotis',6,240,'roti','1 roti',2,80)`); ok('quick-add: saves a dataset food + portion')
+await as(A, `insert into quick_adds(name,grams,kcal) values ('Black coffee',0,5)`); ok('quick-add: 0 g protein allowed with calories')
+try { await as(A, `insert into quick_adds(name,grams) values ('Nothing',0)`); bad('empty quick-add') } catch { ok('quick-add: no protein and no calories refused') }
+// a protein entry still can't point at someone else's quick-add
+const qaA=(await as(A,`select id from quick_adds limit 1`)).rows[0].id
+try { await as(B, `insert into protein_entries(grams,quick_add_id,local_date) values (5,'${qaA}','2026-10-23')`); bad('B used A quick-add') } catch { ok('food: B blocked from linking A\'s quick-add') }
+// calorie goals
+await as(A, `insert into calorie_goals(goal_kcal,effective_from) values (2200,'2026-10-20')`)
+await as(A, `insert into calorie_goals(goal_kcal,effective_from) values (2000,'2026-10-20') on conflict (user_id,effective_from) do update set goal_kcal=excluded.goal_kcal`)
+const cg=(await as(A,`select goal_kcal from calorie_goals`)).rows; (cg.length===1&&cg[0].goal_kcal===2000)?ok('calorie goal: one per day, upsert replaces'):bad(JSON.stringify(cg))
+try { await as(A, `insert into calorie_goals(goal_kcal,effective_from) values (300,'2026-10-21')`); bad('300 kcal goal') } catch { ok('calorie goal: bounds 800 to 6000 enforced') }
+const cgB=(await as(B,`select count(*)::int c from calorie_goals`)).rows[0].c; cgB===0?ok('calorie goal: B sees 0 of A\'s goals'):bad('B sees A goals')
+try { await as(B, `insert into calorie_goals(user_id,goal_kcal,effective_from) values ('${A}',2500,'2026-10-22')`); bad('B wrote A goal') } catch { ok('calorie goal: B blocked from writing as A') }
+await db.exec('set role anon'); try { await db.query('select * from calorie_goals'); bad('anon read calorie goals') } catch { ok('calorie goal: anon cannot read') } finally { await db.exec('reset role') }
+await db.exec('set role anon'); try { await db.query('select * from protein_entries'); bad('anon read food') } catch { ok('food: anon cannot read') } finally { await db.exec('reset role') }

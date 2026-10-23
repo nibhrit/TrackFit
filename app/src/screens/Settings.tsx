@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { clearUser, goalFor, setWeightUnit, useStore } from '../data/store'
+import { bodyKg, clearUser, goalFor, kcalGoalFor, setWeightUnit, useStore } from '../data/store'
 import { localDate } from '../lib/dates'
-import { GoalSetting, SavedFoods } from '../components/ProteinSettings'
+import { CalorieGoalSetting, GoalSetting, SavedFoods } from '../components/ProteinSettings'
+
+const FOOD_DATA_URL = 'https://github.com/nibhrit/TrackFit/blob/main/product/FOOD_DATA.md'
 
 type Props = { session: Session; onClose: () => void }
 
@@ -19,15 +21,22 @@ export default function Settings({ session, onClose }: Props) {
   }, [])
 
   const unit = store.settings.body_weight_unit
+  // Rough maintenance suggestion: about 30 kcal per kg, rounded to 50
+  const suggestedKcal = Math.round((bodyKg(store).kg * 30) / 50) * 50
 
   return (
     <>
       <button className="link back" onClick={onClose}>‹ Back</button>
       <div className="hdr"><h1>Settings</h1></div>
 
-      <h2 className="sec">Protein</h2>
+      <h2 className="sec">Food</h2>
       <GoalSetting current={goalFor(store, localDate())} />
+      <CalorieGoalSetting current={kcalGoalFor(store, localDate())} suggested={suggestedKcal} />
       <SavedFoods quickAdds={store.quickAdds} />
+      <p className="cap empty">
+        Nutrition data: USDA FoodData Central (public domain). Dishes are TrackFit recipes from those ingredients; restaurant dishes are estimates. Approximate, not medical advice.{' '}
+        <a href={FOOD_DATA_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--lift)', fontWeight: 600 }}>Food data sources</a>
+      </p>
 
       <h2 className="sec">Body weight</h2>
       <div className="card hdr">

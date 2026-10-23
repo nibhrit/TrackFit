@@ -16,6 +16,10 @@ It also tracks body weight over time and shows how consistently you log.
 - [Design direction](product/DESIGN.md): the "Chalk and plate" visual system
 - [Clickable prototype](product/prototype.html)
 
+## Food data
+
+Nutrition data: USDA FoodData Central (U.S. Department of Agriculture, Agricultural Research Service; public domain, CC0 1.0), https://fdc.nal.usda.gov. Dish values are TrackFit standard recipes calculated from these ingredients; some foods are TrackFit estimates. Values are approximate and are not medical advice. Methodology: [product/FOOD_DATA.md](product/FOOD_DATA.md).
+
 ## Stack
 
 | Layer | Choice |

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  bodyKg, deleteWeight, goalFor, habitsOn, kcalOn, logWeight, loggedOn, proteinTotal, streak, useStore,
+  bodyKg, deleteWeight, goalFor, habitsOn, kcalEatenOn, kcalGoalFor, kcalOn, logWeight, loggedOn, proteinTotal, streak, useStore,
 } from '../data/store'
 import Header from '../components/Header'
 import type { BodyWeight, HabitKey, Unit } from '../data/types'
@@ -80,34 +80,48 @@ function HabitGrid({ days, today }: { days: string[]; today: string }) {
   )
 }
 
-// Estimated calories burnt per day this week, in graphite (blue/yellow/green are taken)
+// Calories eaten vs estimated calories burnt per day this week, on one kcal axis.
+// Both graphite (blue/yellow/green are taken): eaten = solid bar, burnt = outlined bar; dashed line = today's target.
 function KcalCard({ days, today }: { days: string[]; today: string }) {
   const store = useStore()
   const [active, setActive] = useState(today)
-  const rows = days.map((d) => ({ d, ...kcalOn(store, d) }))
-  const max = Math.max(1, ...rows.map((r) => r.total)) * 1.1
+  const rows = days.map((d) => ({ d, eaten: kcalEatenOn(store, d), burnt: kcalOn(store, d), goal: kcalGoalFor(store, d) }))
+  const goalNow = kcalGoalFor(store, today)
+  const max = Math.max(1, goalNow ?? 0, ...rows.map((r) => Math.max(r.eaten.total, r.burnt.total))) * 1.1
   const shown = rows.find((r) => r.d === active)!
-  const week = rows.reduce((s, r) => s + r.total, 0)
+  const sofar = rows.filter((r) => r.d <= today)
+  const eatenDays = sofar.filter((r) => r.eaten.total > 0)
+  const avg = eatenDays.length ? Math.round(eatenDays.reduce((s, r) => s + r.eaten.total, 0) / eatenDays.length) : 0
+  const burntWeek = sofar.reduce((s, r) => s + r.burnt.total, 0)
+  const missing = sofar.reduce((n, r) => n + r.eaten.missing, 0)
+  const h = (v: number, d: string) => `${d > today ? 0 : Math.max(2, (v / max) * 100)}%`
   return (
     <div className="card form">
       <div className="card-top">
-        <b>Calories burnt</b>
-        <span className="cap">about {week} kcal this week</span>
+        <b>Calories</b>
+        <span className="cap">{avg ? `avg ${avg} eaten a day` : 'no calories logged yet'}</span>
       </div>
       <span className="cap">
-        <span className="trend-read">{fmtDate(shown.d)}: <b>about {shown.total} kcal</b></span>
-        {shown.total > 0 && ` · cardio ${shown.cardio}, lifting ${shown.lifting}`}
+        <span className="trend-read">{fmtDate(shown.d)}: <b>{shown.eaten.total} eaten</b></span>
+        {shown.goal ? ` of ${shown.goal}` : ''} · about {shown.burnt.total} burnt
+        {shown.burnt.total > 0 && ` (cardio ${shown.burnt.cardio}, lifting ${shown.burnt.lifting})`}
       </span>
-      <div className="bars kcal" role="img" aria-label={`Estimated calories burnt per day this week, about ${week} in total`}>
+      <div className="bars kcal" role="img" aria-label={`Calories eaten and burnt per day this week. Average eaten ${avg} a day, about ${burntWeek} burnt in total.`}>
         {rows.map((r) => (
           <button key={r.d} className={`bar-hit${r.d === shown.d ? ' active' : ''}`} disabled={r.d > today}
-            aria-label={`${fmtDate(r.d)}: about ${r.total} kcal`} onClick={() => setActive(r.d)}>
-            <span className="bar" style={{ height: `${r.d > today ? 0 : Math.max(2, (r.total / max) * 100)}%` }} />
+            aria-label={`${fmtDate(r.d)}: ${r.eaten.total} kcal eaten, about ${r.burnt.total} burnt`} onClick={() => setActive(r.d)}>
+            <span className="bar eaten" style={{ height: h(r.eaten.total, r.d) }} />
+            <span className="bar burnt" style={{ height: h(r.burnt.total, r.d) }} />
           </button>
         ))}
+        {goalNow && <div className="goal-line" style={{ bottom: `${(goalNow / max) * 100}%` }}><span>{goalNow} target</span></div>}
       </div>
       <div className="bar-lbl">{rows.map((r) => <span key={r.d}>{fmtDay(r.d).slice(0, 2)}</span>)}</div>
-      <span className="cap">Estimates{bodyKg(store).estimated ? ', using 70 kg until you log your weight' : ''}. Lifting counts about 3 minutes per set.</span>
+      <span className="cap"><span className="swatch eaten" />eaten <span className="swatch burnt" style={{ marginLeft: 10 }} />burnt (estimate)</span>
+      <span className="cap">
+        About {burntWeek} burnt this week, an estimate{bodyKg(store).estimated ? ', using 70 kg until you log your weight' : ''}; lifting counts about 3 minutes per set.
+        {missing > 0 && ` Entries with protein only (${missing} this week) aren’t counted as eaten.`}
+      </span>
     </div>
   )
 }

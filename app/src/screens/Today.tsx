@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { goalFor, groupsOn, habitsOn, kcalOn, lastSession, proteinTotal, todaySession, useStore } from '../data/store'
+import { goalFor, groupsOn, habitsOn, kcalEatenOn, kcalGoalFor, kcalOn, lastSession, proteinTotal, todaySession, useStore } from '../data/store'
 import { GROUPS, type Exercise } from '../data/types'
 import { fmtDate, localDate } from '../lib/dates'
 import { fmtSets } from '../lib/format'
@@ -37,9 +37,9 @@ export default function Today({ onOpenExercise, onGoToLift, onGoToProtein }: Pro
     <>
       <Header title="Today" aside={new Date().toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} />
 
-      <div className="tiles">
+      <div className="tiles food">
         <ProteinTile onOpen={onGoToProtein} />
-        <KcalTile />
+        <KcalTile onOpen={onGoToProtein} />
         <button className="tile" onClick={() => setShowHabits(true)} aria-label={`Habits: ${habitsDone} of 2 logged today`}>
           <span className="num tile-num habit-num">{habitsDone}<span className="tile-of">/2</span></span>
           <span className="cap">habits</span>
@@ -85,15 +85,21 @@ export default function Today({ onOpenExercise, onGoToLift, onGoToProtein }: Pro
   )
 }
 
-// Estimated calories burnt today; tap to see cardio vs lifting
-function KcalTile() {
+// Calories eaten today (graphite meter against the target, if set) and the estimated calories burnt.
+// Cardio vs lifting split of the burnt estimate is on the Week page.
+function KcalTile({ onOpen }: { onOpen: () => void }) {
   const store = useStore()
-  const [split, setSplit] = useState(false)
-  const k = kcalOn(store, localDate())
+  const today = localDate()
+  const eaten = kcalEatenOn(store, today).total
+  const goal = kcalGoalFor(store, today)
+  const burnt = kcalOn(store, today).total
   return (
-    <button className="tile" onClick={() => setSplit(!split)} aria-label={`About ${k.total} kilocalories burnt today`}>
-      <span className="num tile-num">{k.total}</span>
-      <span className="cap">{split ? `cardio ${k.cardio} · lift ${k.lifting}` : 'kcal burnt'}</span>
+    <button className="tile" onClick={onOpen}
+      aria-label={`${eaten} kilocalories eaten${goal ? ` of ${goal}` : ''}, about ${burnt} burnt today`}>
+      <span className="num tile-num">{eaten}</span>
+      {goal && <span className="meter" aria-hidden="true"><span style={{ width: `${Math.min(eaten / goal, 1) * 100}%` }} /></span>}
+      <span className="cap">{goal ? `of ${goal} kcal` : 'kcal eaten'}</span>
+      <span className="cap">{burnt} burnt</span>
     </button>
   )
 }

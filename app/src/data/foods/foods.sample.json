@@ -1,0 +1,151 @@
+{
+  "version": "sample",
+  "generated": "2026-10-23",
+  "foods": [
+    {
+      "id": "roti-whole-wheat",
+      "name": "Roti (whole wheat)",
+      "aliases": ["chapati", "phulka", "fulka", "rotli"],
+      "category": "indian_home",
+      "per100g": { "kcal": 297, "protein_g": 9.8, "carbs_g": 50.2, "fat_g": 6.6, "fiber_g": 8.5 },
+      "portions": [
+        { "label": "1 roti", "grams": 40, "default": true },
+        { "label": "1 large roti", "grams": 55 }
+      ],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured",
+      "notes": "Sample data for development, replaced by foods.json"
+    },
+    {
+      "id": "toor-dal-cooked",
+      "name": "Toor dal, cooked",
+      "aliases": ["arhar dal", "tuvar dal", "dal", "daal", "dhal", "pigeon pea"],
+      "category": "indian_home",
+      "per100g": { "kcal": 121, "protein_g": 6.8, "carbs_g": 23.3, "fat_g": 0.4, "fiber_g": 6.7 },
+      "portions": [
+        { "label": "1 katori", "grams": 150, "default": true },
+        { "label": "1 ladle", "grams": 75 }
+      ],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured",
+      "notes": "Plain boiled, no tadka. Sample data for development"
+    },
+    {
+      "id": "paneer",
+      "name": "Paneer",
+      "aliases": ["cottage cheese", "panir"],
+      "category": "basic",
+      "per100g": { "kcal": 265, "protein_g": 18.3, "carbs_g": 1.2, "fat_g": 20.8 },
+      "portions": [
+        { "label": "1 piece", "grams": 20 },
+        { "label": "1 serving", "grams": 100, "default": true }
+      ],
+      "source": { "name": "Indian Nutrient Databank (INDB)" },
+      "confidence": "measured",
+      "notes": "Sample data for development"
+    },
+    {
+      "id": "rice-white-cooked",
+      "name": "Rice, white, cooked",
+      "aliases": ["chawal", "steamed rice", "plain rice", "bhaat"],
+      "category": "indian_home",
+      "per100g": { "kcal": 130, "protein_g": 2.7, "carbs_g": 28.2, "fat_g": 0.3, "fiber_g": 0.4 },
+      "portions": [
+        { "label": "1 katori", "grams": 150, "default": true },
+        { "label": "1 plate", "grams": 250 }
+      ],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured"
+    },
+    {
+      "id": "egg-boiled",
+      "name": "Egg, boiled",
+      "aliases": ["anda", "hard boiled egg", "eggs"],
+      "category": "basic",
+      "per100g": { "kcal": 155, "protein_g": 12.6, "carbs_g": 1.1, "fat_g": 10.6 },
+      "portions": [{ "label": "1 egg", "grams": 50, "default": true }],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured"
+    },
+    {
+      "id": "egg-white-boiled",
+      "name": "Egg white, boiled",
+      "aliases": ["anda safedi", "egg whites"],
+      "category": "basic",
+      "per100g": { "kcal": 52, "protein_g": 10.9, "carbs_g": 0.7, "fat_g": 0.2 },
+      "portions": [{ "label": "1 egg white", "grams": 33, "default": true }],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured"
+    },
+    {
+      "id": "chicken-breast-cooked",
+      "name": "Chicken breast, cooked",
+      "aliases": ["grilled chicken", "murgh", "chicken"],
+      "category": "basic",
+      "per100g": { "kcal": 165, "protein_g": 31, "carbs_g": 0, "fat_g": 3.6 },
+      "portions": [
+        { "label": "1 piece", "grams": 120 },
+        { "label": "100 g serving", "grams": 100, "default": true }
+      ],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured",
+      "notes": "Skinless, roasted"
+    },
+    {
+      "id": "curd-whole-milk",
+      "name": "Curd (dahi)",
+      "aliases": ["dahi", "yogurt", "yoghurt", "doi"],
+      "category": "basic",
+      "per100g": { "kcal": 61, "protein_g": 3.5, "carbs_g": 4.7, "fat_g": 3.3 },
+      "portions": [{ "label": "1 katori", "grams": 150, "default": true }],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured",
+      "notes": "Whole milk"
+    },
+    {
+      "id": "banana",
+      "name": "Banana",
+      "aliases": ["kela"],
+      "category": "basic",
+      "per100g": { "kcal": 89, "protein_g": 1.1, "carbs_g": 22.8, "fat_g": 0.3, "fiber_g": 2.6 },
+      "portions": [{ "label": "1 medium banana", "grams": 118, "default": true }],
+      "source": { "name": "USDA FoodData Central", "url": "https://fdc.nal.usda.gov/" },
+      "confidence": "measured"
+    },
+    {
+      "id": "soya-chunks-dry",
+      "name": "Soya chunks (dry weight)",
+      "aliases": ["soy chunks", "nutrela", "meal maker", "soya badi"],
+      "category": "basic",
+      "per100g": { "kcal": 345, "protein_g": 52, "carbs_g": 33, "fat_g": 0.5, "fiber_g": 13 },
+      "portions": [{ "label": "1 handful", "grams": 25, "default": true }],
+      "source": { "name": "Typical packaged label value" },
+      "confidence": "estimate"
+    },
+    {
+      "id": "chicken-biryani-restaurant",
+      "name": "Chicken biryani (restaurant)",
+      "aliases": ["biriyani", "murgh biryani"],
+      "category": "restaurant",
+      "per100g": { "kcal": 180, "protein_g": 9, "carbs_g": 20, "fat_g": 7 },
+      "portions": [
+        { "label": "1 plate", "grams": 350, "default": true },
+        { "label": "1 half plate", "grams": 200 }
+      ],
+      "source": { "name": "Typical restaurant value" },
+      "confidence": "estimate",
+      "notes": "Varies a lot with oil and rice-to-meat ratio"
+    },
+    {
+      "id": "milk-toned",
+      "name": "Milk, toned",
+      "aliases": ["doodh", "milk"],
+      "category": "basic",
+      "per100g": { "kcal": 58, "protein_g": 3.1, "carbs_g": 4.7, "fat_g": 3 },
+      "portions": [{ "label": "1 glass", "grams": 250, "default": true }],
+      "source": { "name": "Indian Nutrient Databank (INDB)" },
+      "confidence": "measured",
+      "notes": "Approx. 3% fat. Sample data for development"
+    }
+  ]
+}
